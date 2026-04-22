@@ -1,0 +1,1246 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="UTF-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+<title>Together</title>
+<link rel="preconnect" href="https://fonts.googleapis.com"/>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
+<link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
+<script src="https://unpkg.com/react@18.3.1/umd/react.development.js" crossorigin></script>
+<script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" crossorigin></script>
+<script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" crossorigin></script>
+<script src="https://unpkg.com/@microsoft/signalr@8.0.0/dist/browser/signalr.min.js" crossorigin></script>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0;}
+html,body{height:100%;font-family:'Plus Jakarta Sans',sans-serif;}
+body{background:#111118;color:#F0EFE9;}
+::-webkit-scrollbar{width:6px;height:6px;}
+::-webkit-scrollbar-track{background:transparent;}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,0.1);border-radius:99px;}
+@keyframes sheet-in{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes panel-in{from{transform:translateX(40px);opacity:0}to{transform:translateX(0);opacity:1}}
+@keyframes fade-in{from{opacity:0}to{opacity:1}}
+@keyframes toast-in{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes bar-grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
+@keyframes msg-in-right{from{transform:translateX(16px) scale(0.95);opacity:0}to{transform:translateX(0) scale(1);opacity:1}}
+@keyframes msg-in-left{from{transform:translateX(-16px) scale(0.95);opacity:0}to{transform:translateX(0) scale(1);opacity:1}}
+@keyframes pop{from{transform:scale(0.8);opacity:0}to{transform:scale(1);opacity:1}}
+@keyframes spin{to{transform:rotate(360deg)}}
+textarea::-webkit-scrollbar{display:none;}
+.light-mode{filter:none;}
+body.light{background:#F7F6F2;color:#1A1916;}
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+
+// ── API ───────────────────────────────────────────────────────────────────────
+const BASE = '';
+async function req(method, path, body) {
+  const token = localStorage.getItem('token');
+  const res = await fetch(BASE + path, {
+    method,
+    headers: { 'Content-Type': 'application/json', ...(token ? { Authorization: `Bearer ${token}` } : {}) },
+    body: body != null ? JSON.stringify(body) : undefined,
+  });
+  if (res.status === 204) return null;
+  const text = await res.text().catch(() => '');
+  let data; try { data = JSON.parse(text); } catch { data = text; }
+  if (!res.ok) throw new Error(typeof data === 'string' ? data : (data?.message ?? data?.title ?? res.statusText));
+  return data;
+}
+const api = {
+  register: d => req('POST','/auth/register',d),
+  login: d => req('POST','/auth/login',d),
+  getPosts: p => { const q=p?'?'+new URLSearchParams(Object.fromEntries(Object.entries(p).filter(([,v])=>v))):''; return req('GET','/posts'+q); },
+  getPost: id => req('GET',`/posts/${id}`),
+  createPost: d => req('POST','/posts',d),
+  deletePost: id => req('DELETE',`/posts/${id}`),
+  joinPost: id => req('POST',`/posts/${id}/join`),
+  approveParticipant: (pid,uid) => req('PUT',`/posts/${pid}/participants/${uid}/approve`),
+  rejectParticipant: (pid,uid) => req('PUT',`/posts/${pid}/participants/${uid}/reject`),
+  getMessages: id => req('GET',`/posts/${id}/messages`),
+  sendMessage: (id,text) => req('POST',`/posts/${id}/messages`,{text}),
+  getUser: id => req('GET',`/users/${id}`),
+  createReview: d => req('POST','/reviews',d),
+};
+
+// ── Theme ─────────────────────────────────────────────────────────────────────
+const THEMES = {
+  dark: {
+    bg:'#111118', bgCard:'#1C1C24', bgInput:'#25252E', bgInputActive:'#2D2D38',
+    text:'#F0EFE9', textSub:'#8E8D99', textMuted:'#52515C',
+    border:'rgba(255,255,255,0.06)', borderActive:'rgba(255,255,255,0.18)',
+    accent:'oklch(0.72 0.18 38)', accentBg:'oklch(0.22 0.06 38)',
+    danger:'oklch(0.65 0.18 25)', dangerBg:'oklch(0.2 0.06 25)',
+    success:'oklch(0.65 0.18 155)', successBg:'oklch(0.2 0.06 155)',
+    gold:'oklch(0.78 0.18 75)', goldBg:'oklch(0.22 0.06 75)',
+    shadow:'0 2px 8px rgba(0,0,0,0.4), 0 8px 32px rgba(0,0,0,0.3)',
+    diffBeginner:'oklch(0.65 0.18 155)', diffBeginnerBg:'oklch(0.2 0.06 155)',
+    diffMedium:'oklch(0.72 0.18 38)', diffMediumBg:'oklch(0.22 0.06 38)',
+    diffPro:'oklch(0.65 0.18 25)', diffProBg:'oklch(0.2 0.06 25)',
+    bubbleMe:'oklch(0.72 0.18 38)', bubbleOther:'#25252E',
+    avatarPalette:['#7A5C3A','#3A5C7A','#3A7A5C','#7A3A5C','#5C3A7A','#7A7A3A'],
+  },
+  light: {
+    bg:'#F7F6F2', bgCard:'#FFFFFF', bgInput:'#EEEEE8', bgInputActive:'#FFFFFF',
+    text:'#1A1916', textSub:'#6B6860', textMuted:'#A8A69D',
+    border:'rgba(0,0,0,0.07)', borderActive:'rgba(0,0,0,0.15)',
+    accent:'oklch(0.67 0.18 38)', accentBg:'oklch(0.97 0.04 38)',
+    danger:'oklch(0.58 0.2 25)', dangerBg:'oklch(0.97 0.04 25)',
+    success:'oklch(0.55 0.16 155)', successBg:'oklch(0.95 0.04 155)',
+    gold:'oklch(0.68 0.18 75)', goldBg:'oklch(0.97 0.04 75)',
+    shadow:'0 1px 3px rgba(0,0,0,0.05), 0 4px 16px rgba(0,0,0,0.06)',
+    diffBeginner:'oklch(0.55 0.16 155)', diffBeginnerBg:'oklch(0.95 0.04 155)',
+    diffMedium:'oklch(0.67 0.18 38)', diffMediumBg:'oklch(0.97 0.04 38)',
+    diffPro:'oklch(0.58 0.2 25)', diffProBg:'oklch(0.97 0.04 25)',
+    bubbleMe:'oklch(0.67 0.18 38)', bubbleOther:'#FFFFFF',
+    avatarPalette:['#E8C4A8','#A8C4E8','#A8E8C4','#E8A8C4','#C4A8E8','#E8E8A8'],
+  }
+};
+let T = THEMES[localStorage.getItem('theme')||'dark'];
+
+// ── Icons ─────────────────────────────────────────────────────────────────────
+const I = {
+  hiking: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="13" cy="4" r="1.5"/><path d="M7 20l3-7 2 2 2-4 3 9"/><path d="M12 9l-2 3H7"/></svg>,
+  skiing: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="17" cy="4" r="1.5"/><path d="M3 19l5-6 3 2 3-5 3 3"/><path d="M3 21h18"/></svg>,
+  snowboard: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><circle cx="15" cy="4" r="1.5"/><path d="M5 20l14-12"/><path d="M7 18l4-10"/></svg>,
+  trekking: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M4 20l4-16 3 8 3-6 4 14"/><path d="M8 13h6"/></svg>,
+  home: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M3 9.5L12 3l9 6.5V20a1 1 0 01-1 1H4a1 1 0 01-1-1V9.5z"/><path d="M9 21V12h6v9"/></svg>,
+  chat: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/></svg>,
+  profile: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 3.58-7 8-7s8 3 8 7"/></svg>,
+  plus: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>,
+  search: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.35-4.35"/></svg>,
+  send: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M22 2L11 13"/><path d="M22 2L15 22l-4-9-9-4 20-7z"/></svg>,
+  back: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 12H5M11 6l-6 6 6 6"/></svg>,
+  check: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round"><path d="M5 13l4 4L19 7"/></svg>,
+  close: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round"><path d="M18 6L6 18M6 6l12 12"/></svg>,
+  star: <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l3.09 6.26L22 9.27l-5 4.87 1.18 6.88L12 17.77l-6.18 3.25L7 14.14 2 9.27l6.91-1.01L12 2z"/></svg>,
+  location: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7z"/><circle cx="12" cy="9" r="2.5"/></svg>,
+  calendar: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="18" rx="3"/><path d="M16 2v4M8 2v4M3 10h18"/></svg>,
+  car: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M5 11l1.5-4.5h11L19 11"/><rect x="3" y="11" width="18" height="7" rx="2"/><circle cx="7.5" cy="18" r="1.5"/><circle cx="16.5" cy="18" r="1.5"/><path d="M3 14h18"/></svg>,
+  bus: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="3" y="4" width="18" height="14" rx="3"/><path d="M3 10h18M8 4v10M16 4v10"/><circle cx="7" cy="19" r="1.5"/><circle cx="17" cy="19" r="1.5"/></svg>,
+  logout: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>,
+  arrow: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M9 18l6-6-6-6"/></svg>,
+  people: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="9" cy="7" r="3"/><circle cx="16" cy="7" r="2.5"/><path d="M2 19c0-3.87 3.13-7 7-7h4c3.87 0 7 3.13 7 7"/></svg>,
+  crown: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 18l3-10 4 6 3-8 3 8 4-6 3 10H2z"/></svg>,
+  mountain: <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"><path d="M3 20l7-12 4 6 2-3 5 9H3z"/></svg>,
+};
+
+const activityIcons = { hiking: I.hiking, skiing: I.skiing, snowboard: I.snowboard, trekking: I.trekking };
+const activityLabels = { hiking:'Поход', skiing:'Лыжи', snowboard:'Сноуборд', trekking:'Трекинг' };
+const diffLabels = { beginner:'Новичок', medium:'Средний', pro:'Профи' };
+const transportLabels = { 'has-seats':'🚗 Есть места', 'need-ride':'🚕 Ищу машину', 'public':'🚌 Автобус/поезд' };
+const statusLabels = { active:'Открыто', full:'Заполнено', past:'Завершено' };
+
+function fmt(d) { return new Date(d).toLocaleDateString('ru',{day:'numeric',month:'short'}); }
+function fmtLong(d) { return new Date(d).toLocaleDateString('ru',{day:'numeric',month:'long',year:'numeric'}); }
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+function initials(name) { return (name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
+function avatarColor(name) { return T.avatarPalette[(name||'').charCodeAt(0) % T.avatarPalette.length]; }
+
+// ── Shared UI ─────────────────────────────────────────────────────────────────
+function Av({ name, size=36 }) {
+  return <div style={{ width:size, height:size, borderRadius:99, background:avatarColor(name||''), display:'flex', alignItems:'center', justifyContent:'center', fontSize:size*0.35, fontWeight:800, color:'rgba(0,0,0,0.5)', flexShrink:0 }}>{initials(name)}</div>;
+}
+
+function Spinner() {
+  return <div style={{ width:20, height:20, border:'2px solid rgba(255,255,255,0.1)', borderTopColor:T.accent, borderRadius:99, animation:'spin 0.6s linear infinite', display:'inline-block' }}/>;
+}
+
+function Btn({ children, onClick, variant='primary', size='md', disabled, full, style={} }) {
+  const base = { display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6, borderRadius:14, fontFamily:"'Plus Jakarta Sans',sans-serif", fontWeight:700, cursor:disabled?'not-allowed':'pointer', border:'none', transition:'all 0.15s', opacity:disabled?0.5:1, ...style };
+  const sz = size==='sm' ? { padding:'7px 14px', fontSize:13 } : { padding:'12px 22px', fontSize:15 };
+  const variants = {
+    primary: { background:T.accent, color:'#fff', boxShadow:`0 4px 16px ${T.accent}44` },
+    secondary: { background:T.bgInput, color:T.text, border:`1.5px solid ${T.border}` },
+    danger: { background:T.dangerBg, color:T.danger },
+    ghost: { background:'transparent', color:T.textSub },
+  };
+  return <button onClick={onClick} disabled={disabled} style={{ ...base, ...sz, ...variants[variant], ...(full?{width:'100%'}:{}) }}>{children}</button>;
+}
+
+function Input({ value, onChange, placeholder, type='text', error }) {
+  const [focused, setFocused] = React.useState(false);
+  return <input type={type} value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder}
+    style={{ background:T.bgInput, border:`1.5px solid ${error?T.danger:focused?T.accent:T.border}`, borderRadius:12, padding:'11px 14px', fontSize:14, fontFamily:"'Plus Jakarta Sans',sans-serif", fontWeight:500, color:T.text, width:'100%', outline:'none', transition:'border 0.2s' }}
+    onFocus={()=>setFocused(true)} onBlur={()=>setFocused(false)}/>;
+}
+
+function Textarea({ value, onChange, placeholder, rows=4 }) {
+  const [focused, setFocused] = React.useState(false);
+  return <textarea value={value} onChange={e=>onChange(e.target.value)} placeholder={placeholder} rows={rows}
+    style={{ background:T.bgInput, border:`1.5px solid ${focused?T.accent:T.border}`, borderRadius:12, padding:'11px 14px', fontSize:14, fontFamily:"'Plus Jakarta Sans',sans-serif", fontWeight:500, color:T.text, width:'100%', outline:'none', resize:'vertical', transition:'border 0.2s', lineHeight:1.5 }}
+    onFocus={()=>setFocused(true)} onBlur={()=>setFocused(false)}/>;
+}
+
+function Select({ value, onChange, options }) {
+  return <select value={value} onChange={e=>onChange(e.target.value)}
+    style={{ background:T.bgInput, border:`1.5px solid ${T.border}`, borderRadius:12, padding:'11px 14px', fontSize:14, fontFamily:"'Plus Jakarta Sans',sans-serif", fontWeight:500, color:T.text, width:'100%', outline:'none', cursor:'pointer', appearance:'none' }}>
+    {options.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
+  </select>;
+}
+
+function Tag({ children, color, bg }) {
+  return <span style={{ display:'inline-block', padding:'4px 10px', borderRadius:99, fontSize:12, fontWeight:700, color:color||T.textSub, background:bg||T.bgInput, flexShrink:0 }}>{children}</span>;
+}
+
+function DiffTag({ diff }) {
+  const colors = { beginner:[T.diffBeginner,T.diffBeginnerBg], medium:[T.diffMedium,T.diffMediumBg], pro:[T.diffPro,T.diffProBg] };
+  const [c,bg] = colors[diff]||[T.textSub,T.bgInput];
+  return <Tag color={c} bg={bg}>{diffLabels[diff]||diff}</Tag>;
+}
+
+function StatusTag({ status }) {
+  const map = { active:[T.success,T.successBg], full:[T.textMuted,T.bgInput], past:[T.textMuted,'rgba(255,255,255,0.04)'] };
+  const [c,bg] = map[status]||[T.textSub,T.bgInput];
+  return <Tag color={c} bg={bg}>{statusLabels[status]||status}</Tag>;
+}
+
+function Card({ children, style={}, onClick }) {
+  return <div onClick={onClick} style={{ background:T.bgCard, border:`1.5px solid ${T.border}`, borderRadius:18, boxShadow:T.shadow, ...style }}>{children}</div>;
+}
+
+function SectionLabel({ children }) {
+  return <div style={{ fontSize:11, fontWeight:700, color:T.textMuted, letterSpacing:'0.07em', textTransform:'uppercase', marginBottom:10 }}>{children}</div>;
+}
+
+// ── AUTH ──────────────────────────────────────────────────────────────────────
+function AuthPage({ onAuth }) {
+  const [mode, setMode] = React.useState('login');
+  const [form, setForm] = React.useState({ name:'', username:'', email:'', password:'', location:'' });
+  const [err, setErr] = React.useState('');
+  const [loading, setLoading] = React.useState(false);
+  const set = k => v => setForm(f=>({...f,[k]:v}));
+
+  const submit = async () => {
+    setErr(''); setLoading(true);
+    try {
+      if (mode === 'register') await api.register(form);
+      const res = await api.login({ email: form.email, password: form.password });
+      localStorage.setItem('token', res.token);
+      localStorage.setItem('user', JSON.stringify(res.user));
+      onAuth(res.user);
+    } catch(e) { setErr(e.message); }
+    setLoading(false);
+  };
+
+  const onKey = e => { if (e.key === 'Enter') submit(); };
+
+  return (
+    <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:`radial-gradient(ellipse at 30% 40%, oklch(0.28 0.08 38) 0%, ${T.bg} 60%)` }}>
+      <Card style={{ padding:40, width:420 }}>
+        <div style={{ fontSize:28, fontWeight:800, color:T.accent, marginBottom:4 }}>Together</div>
+        <div style={{ fontSize:14, color:T.textMuted, marginBottom:28 }}>
+          {mode==='login' ? 'Войди в свой аккаунт' : 'Создай аккаунт и ищи напарников'}
+        </div>
+
+        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+          {mode==='register' && <>
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+              <Input value={form.name} onChange={set('name')} placeholder="Имя"/>
+              <Input value={form.username} onChange={set('username')} placeholder="username"/>
+            </div>
+            <Input value={form.location} onChange={set('location')} placeholder="Город"/>
+          </>}
+          <Input value={form.email} onChange={set('email')} placeholder="Email" type="email" onKeyDown={onKey}/>
+          <Input value={form.password} onChange={set('password')} placeholder="Пароль" type="password" onKeyDown={onKey}/>
+          {err && <div style={{ fontSize:13, color:T.danger, background:T.dangerBg, padding:'10px 14px', borderRadius:10 }}>{err}</div>}
+          <Btn onClick={submit} disabled={loading} full>{loading ? <Spinner/> : mode==='login' ? 'Войти' : 'Создать аккаунт'}</Btn>
+        </div>
+
+        <div style={{ textAlign:'center', marginTop:18, fontSize:13, color:T.textMuted }}>
+          {mode==='login' ? <>Нет аккаунта? <span style={{ color:T.accent, cursor:'pointer', fontWeight:700 }} onClick={()=>setMode('register')}>Зарегистрироваться</span></>
+            : <>Уже есть аккаунт? <span style={{ color:T.accent, cursor:'pointer', fontWeight:700 }} onClick={()=>setMode('login')}>Войти</span></>}
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ── TOAST ─────────────────────────────────────────────────────────────────────
+let _toastSet = null;
+function ToastContainer() {
+  const [toasts, setToasts] = React.useState([]);
+  _toastSet = setToasts;
+  return (
+    <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, display:'flex', flexDirection:'column', gap:8, pointerEvents:'none' }}>
+      {toasts.map(t => (
+        <div key={t.id} style={{ padding:'12px 18px', borderRadius:12, background:t.type==='error'?T.dangerBg:T.accentBg, color:t.type==='error'?T.danger:T.accent, border:`1px solid ${t.type==='error'?T.danger:T.accent}33`, fontSize:14, fontWeight:600, animation:'toast-in 0.3s ease', boxShadow:T.shadow, maxWidth:320 }}>
+          {t.msg}
+        </div>
+      ))}
+    </div>
+  );
+}
+function toast(msg, type='success') {
+  if (!_toastSet) return;
+  const id = Date.now();
+  _toastSet(p=>[...p,{id,msg,type}]);
+  setTimeout(()=>_toastSet(p=>p.filter(t=>t.id!==id)), 3000);
+}
+
+// ── SIDEBAR ───────────────────────────────────────────────────────────────────
+function Sidebar({ page, onNav, user, onLogout, theme, onToggleTheme }) {
+  const items = [
+    { id:'feed', icon:I.home, label:'Лента' },
+    { id:'chats', icon:I.chat, label:'Чаты' },
+    { id:'profile', icon:I.profile, label:'Профиль' },
+  ];
+  const moonIcon = <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 0010 9.79z"/></svg>;
+  const sunIcon = <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>;
+
+  return (
+    <div style={{ width:220, background:T.bgCard, borderRight:`1px solid ${T.border}`, display:'flex', flexDirection:'column', padding:'24px 14px', flexShrink:0, height:'100vh', position:'sticky', top:0 }}>
+      <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 10px', marginBottom:28 }}>
+        <div style={{ fontSize:22, fontWeight:800, color:T.accent }}>Together</div>
+        <button onClick={onToggleTheme} title={theme==='dark'?'Светлая тема':'Тёмная тема'}
+          style={{ width:30,height:30,borderRadius:8,border:`1px solid ${T.border}`,background:T.bgInput,color:T.textMuted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>
+          <div style={{ width:14,height:14 }}>{theme==='dark'?sunIcon:moonIcon}</div>
+        </button>
+      </div>
+
+      <div style={{ display:'flex', flexDirection:'column', gap:4, flex:1 }}>
+        {items.map(item => {
+          const on = page === item.id;
+          return (
+            <button key={item.id} onClick={()=>onNav(item.id)}
+              style={{ display:'flex', alignItems:'center', gap:12, padding:'11px 12px', borderRadius:12, border:'none', background:on?T.accentBg:'transparent', color:on?T.accent:T.textSub, cursor:'pointer', fontFamily:"'Plus Jakarta Sans',sans-serif", fontSize:14, fontWeight:700, transition:'all 0.15s', textAlign:'left' }}>
+              <div style={{ width:20, height:20 }}>{item.icon}</div>
+              {item.label}
+            </button>
+          );
+        })}
+
+        <div style={{ marginTop:12, padding:'0 2px' }}>
+          <button onClick={()=>onNav('create')}
+            style={{ display:'flex', alignItems:'center', gap:10, padding:'13px 14px', borderRadius:14, border:'none', background:T.accent, color:'#fff', cursor:'pointer', fontFamily:"'Plus Jakarta Sans',sans-serif", fontSize:14, fontWeight:800, width:'100%', boxShadow:`0 4px 16px ${T.accent}44` }}>
+            <div style={{ width:20, height:20 }}>{I.plus}</div>
+            Создать событие
+          </button>
+        </div>
+      </div>
+
+      <div style={{ borderTop:`1px solid ${T.border}`, paddingTop:16, display:'flex', alignItems:'center', gap:10 }}>
+        <div style={{ cursor:'pointer' }} onClick={()=>onNav('profile')}>
+          <Av name={user.name} size={36}/>
+        </div>
+        <div style={{ flex:1, minWidth:0, cursor:'pointer' }} onClick={()=>onNav('profile')}>
+          <div style={{ fontSize:13, fontWeight:700, color:T.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{user.name}</div>
+          <div style={{ fontSize:11, color:T.textMuted }}>@{user.username}</div>
+        </div>
+        <button onClick={onLogout} title="Выйти"
+          style={{ width:32, height:32, borderRadius:10, border:`1px solid ${T.border}`, background:'transparent', color:T.textMuted, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ width:16, height:16 }}>{I.logout}</div>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── FEED ──────────────────────────────────────────────────────────────────────
+function FeedPage({ currentUser, connection, onOpenPost }) {
+  const [posts, setPosts] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [filters, setFilters] = React.useState({ activity:'', difficulty:'', status:'active' });
+  const [query, setQuery] = React.useState('');
+
+  const load = async () => {
+    setLoading(true);
+    try { setPosts(await api.getPosts(filters)); } catch {}
+    setLoading(false);
+  };
+
+  React.useEffect(() => { load(); }, [filters]);
+
+  React.useEffect(() => {
+    if (!connection) return;
+    const onNew = post => setPosts(p => [post, ...p]);
+    const onDel = id => setPosts(p => p.filter(x => x.id !== id));
+    connection.on('NewPost', onNew);
+    connection.on('PostDeleted', onDel);
+    return () => { connection.off('NewPost', onNew); connection.off('PostDeleted', onDel); };
+  }, [connection]);
+
+  const filtered = posts.filter(p => !query || (p.location+p.region+(p.description||'')).toLowerCase().includes(query.toLowerCase()));
+
+  const FilterPill = ({ label, field, value }) => {
+    const on = filters[field] === value;
+    return <button onClick={()=>setFilters(f=>({...f,[field]:on?'':value}))}
+      style={{ padding:'6px 14px', borderRadius:99, border:`1.5px solid ${on?T.accent:T.border}`, background:on?T.accentBg:T.bgInput, color:on?T.accent:T.textSub, fontSize:12, fontWeight:700, cursor:'pointer', transition:'all 0.15s', fontFamily:"'Plus Jakarta Sans',sans-serif", flexShrink:0 }}>{label}</button>;
+  };
+
+  return (
+    <div style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0 }}>
+      {/* Topbar */}
+      <div style={{ padding:'24px 32px 0', flexShrink:0 }}>
+        <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
+          <div style={{ fontSize:26, fontWeight:800, color:T.text, letterSpacing:'-0.02em' }}>Лента событий</div>
+          <div style={{ display:'flex', alignItems:'center', gap:8, background:T.bgInput, border:`1.5px solid ${T.border}`, borderRadius:12, padding:'9px 14px', width:280 }}>
+            <div style={{ width:16, height:16, color:T.textMuted, flexShrink:0 }}>{I.search}</div>
+            <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск событий…"
+              style={{ flex:1, background:'none', border:'none', outline:'none', fontSize:14, color:T.text, fontFamily:"'Plus Jakarta Sans',sans-serif" }}/>
+          </div>
+        </div>
+
+        {/* Filters */}
+        <div style={{ display:'flex', gap:8, flexWrap:'wrap', marginBottom:24 }}>
+          <FilterPill label="Все" field="status" value=""/>
+          <FilterPill label="🥾 Поход" field="activity" value="hiking"/>
+          <FilterPill label="⛷ Лыжи" field="activity" value="skiing"/>
+          <FilterPill label="🏂 Сноуборд" field="activity" value="snowboard"/>
+          <FilterPill label="🧗 Трекинг" field="activity" value="trekking"/>
+          <div style={{ width:1, background:T.border, margin:'0 4px' }}/>
+          <FilterPill label="Новичок" field="difficulty" value="beginner"/>
+          <FilterPill label="Средний" field="difficulty" value="medium"/>
+          <FilterPill label="Профи" field="difficulty" value="pro"/>
+          <div style={{ width:1, background:T.border, margin:'0 4px' }}/>
+          <FilterPill label="Открытые" field="status" value="active"/>
+          <FilterPill label="Прошедшие" field="status" value="past"/>
+        </div>
+      </div>
+
+      {/* Grid */}
+      <div style={{ flex:1, overflowY:'auto', padding:'0 32px 32px' }}>
+        {loading ? (
+          <div style={{ display:'flex', justifyContent:'center', paddingTop:80 }}><Spinner/></div>
+        ) : filtered.length === 0 ? (
+          <div style={{ textAlign:'center', paddingTop:80, color:T.textMuted }}>
+            <div style={{ fontSize:40, marginBottom:12 }}>🏔</div>
+            <div style={{ fontSize:15, fontWeight:600 }}>Событий не найдено</div>
+          </div>
+        ) : (
+          <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(320px,1fr))', gap:16 }}>
+            {filtered.map(p => <EventCard key={p.id} post={p} currentUser={currentUser} onClick={()=>onOpenPost(p.id)}/>)}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function EventCard({ post: p, onClick }) {
+  const [hov, setHov] = React.useState(false);
+  const fillPct = Math.round((p.filledSpots / p.totalSpots) * 100);
+  return (
+    <Card onClick={onClick}
+      style={{ padding:20, cursor:'pointer', transform:hov?'translateY(-2px)':'translateY(0)', transition:'transform 0.15s, box-shadow 0.15s', boxShadow:hov?'0 12px 40px rgba(0,0,0,0.5)':T.shadow, borderColor:hov?T.accent:T.border }}
+      onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
+      <div style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
+        <div style={{ width:48, height:48, borderRadius:14, background:T.accentBg, display:'flex', alignItems:'center', justifyContent:'center', color:T.accent, flexShrink:0 }}>
+          <div style={{ width:26, height:26 }}>{activityIcons[p.activity]||I.mountain}</div>
+        </div>
+        <div style={{ flex:1, minWidth:0 }}>
+          <div style={{ display:'flex', alignItems:'flex-start', justifyContent:'space-between', gap:8, marginBottom:4 }}>
+            <div style={{ fontSize:15, fontWeight:700, color:T.text, letterSpacing:'-0.01em', overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.location}</div>
+            <StatusTag status={p.status}/>
+          </div>
+          <div style={{ fontSize:12, color:T.textMuted }}>{p.region}</div>
+        </div>
+      </div>
+
+      <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginTop:14 }}>
+        <Tag bg={T.bgInput} color={T.textSub}>{activityLabels[p.activity]}</Tag>
+        <DiffTag diff={p.difficulty}/>
+        <Tag bg={T.bgInput} color={T.textSub}>{fmt(p.dateFrom)} — {fmt(p.dateTo)}</Tag>
+      </div>
+
+      {p.description && (
+        <div style={{ fontSize:13, color:T.textSub, marginTop:12, lineHeight:1.5, overflow:'hidden', display:'-webkit-box', WebkitLineClamp:2, WebkitBoxOrient:'vertical' }}>{p.description}</div>
+      )}
+
+      <div style={{ marginTop:14, paddingTop:14, borderTop:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:10 }}>
+        <div style={{ flex:1 }}>
+          <div style={{ display:'flex', justifyContent:'space-between', marginBottom:5 }}>
+            <span style={{ fontSize:12, color:T.textSub, fontWeight:600 }}><span style={{ color:T.text, fontWeight:800 }}>{p.filledSpots}</span> / {p.totalSpots} едут</span>
+            {p.budget && <span style={{ fontSize:12, color:T.textMuted }}>{p.budget}</span>}
+          </div>
+          <div style={{ height:4, borderRadius:99, background:'rgba(255,255,255,0.06)', overflow:'hidden' }}>
+            <div style={{ height:'100%', borderRadius:99, width:`${fillPct}%`, background:p.status==='full'?T.textMuted:T.accent }}/>
+          </div>
+        </div>
+        <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
+          <Av name={p.author?.name} size={24}/>
+          <span style={{ fontSize:12, color:T.textSub, fontWeight:600 }}>{p.author?.name}</span>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
+// ── EVENT DETAIL ──────────────────────────────────────────────────────────────
+function EventDetailPanel({ postId, currentUser, connection, onClose, onNavigateProfile }) {
+  const [post, setPost] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [joining, setJoining] = React.useState(false);
+  const [messages, setMessages] = React.useState([]);
+  const [msgInput, setMsgInput] = React.useState('');
+  const messagesEndRef = React.useRef(null);
+
+  const load = async () => {
+    setLoading(true);
+    try {
+      const p = await api.getPost(postId);
+      setPost(p);
+      const isAuthor = p.author.id === currentUser.id;
+      const isApproved = p.participants.some(pt => pt.userId === currentUser.id && pt.status === 'approved');
+      if (isAuthor || isApproved) {
+        try { setMessages(await api.getMessages(postId)); } catch {}
+      }
+    } catch {}
+    setLoading(false);
+  };
+  React.useEffect(() => { load(); }, [postId]);
+  React.useEffect(() => { messagesEndRef.current?.scrollIntoView(); }, [messages]);
+
+  React.useEffect(() => {
+    if (!connection) return;
+    connection.invoke('JoinPost', postId);
+    const onMsg = msg => setMessages(m => [...m, msg]);
+    const onParticipant = data => {
+      setPost(p => {
+        if (!p) return p;
+        return {
+          ...p,
+          filledSpots: data.filledSpots,
+          status: data.postStatus,
+          participants: p.participants.map(pt =>
+            pt.userId === data.userId ? { ...pt, status: data.status } : pt
+          )
+        };
+      });
+    };
+    const onJoin = data => {
+      setPost(p => {
+        if (!p) return p;
+        const already = p.participants.some(pt => pt.userId === data.userId);
+        if (already) return p;
+        return { ...p, participants: [...p.participants, data] };
+      });
+    };
+    connection.on('NewMessage', onMsg);
+    connection.on('ParticipantUpdated', onParticipant);
+    connection.on('ParticipantJoined', onJoin);
+    return () => {
+      connection.invoke('LeavePost', postId);
+      connection.off('NewMessage', onMsg);
+      connection.off('ParticipantUpdated', onParticipant);
+      connection.off('ParticipantJoined', onJoin);
+    };
+  }, [connection, postId]);
+
+  const handleJoin = async () => {
+    setJoining(true);
+    try { await api.joinPost(postId); await load(); toast('Заявка отправлена! Ждите одобрения.'); }
+    catch(e) { toast(e.message,'error'); }
+    setJoining(false);
+  };
+  const handleApprove = async uid => {
+    try { await api.approveParticipant(postId, uid); toast('Участник принят ✓'); load(); }
+    catch(e) { toast(e.message,'error'); }
+  };
+  const handleReject = async uid => {
+    try { await api.rejectParticipant(postId, uid); toast('Заявка отклонена'); load(); }
+    catch(e) { toast(e.message,'error'); }
+  };
+  const handleDelete = async () => {
+    if (!confirm('Удалить событие?')) return;
+    try { await api.deletePost(postId); toast('Событие удалено'); onClose(); }
+    catch(e) { toast(e.message,'error'); }
+  };
+  const sendMsg = async () => {
+    const text = msgInput.trim(); if (!text) return;
+    setMsgInput('');
+    try { await api.sendMessage(postId, text); } catch(e) { alert(e.message); }
+  };
+
+  if (loading) return (
+    <div style={{ width:720, borderLeft:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'center', background:T.bg }}>
+      <Spinner/>
+    </div>
+  );
+  if (!post) return null;
+
+  const isAuthor = post.author.id === currentUser.id;
+  const myParticipant = post.participants.find(pt => pt.userId === currentUser.id);
+  const isApproved = myParticipant?.status === 'approved';
+  const canChat = isAuthor || isApproved;
+  const fillPct = Math.round((post.filledSpots / post.totalSpots) * 100);
+
+  return (
+    <div style={{ width:720, borderLeft:`1px solid ${T.border}`, display:'flex', flexDirection:'column', background:T.bg, height:'100vh', overflow:'hidden', animation:'panel-in 0.3s ease' }}>
+      {/* Header */}
+      <div style={{ padding:'20px 24px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:14, flexShrink:0 }}>
+        <div style={{ width:48, height:48, borderRadius:14, background:T.accentBg, display:'flex', alignItems:'center', justifyContent:'center', color:T.accent, flexShrink:0 }}>
+          <div style={{ width:26, height:26 }}>{activityIcons[post.activity]}</div>
+        </div>
+        <div style={{ flex:1 }}>
+          <div style={{ fontSize:20, fontWeight:800, color:T.text, letterSpacing:'-0.02em' }}>{post.location}</div>
+          <div style={{ fontSize:13, color:T.textMuted }}>{post.region}</div>
+        </div>
+        <button onClick={onClose} style={{ width:36, height:36, borderRadius:10, border:`1px solid ${T.border}`, background:T.bgInput, color:T.textSub, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center' }}>
+          <div style={{ width:16, height:16 }}>{I.close}</div>
+        </button>
+      </div>
+
+      <div style={{ flex:1, display:'grid', gridTemplateColumns:'1fr 1fr', minHeight:0 }}>
+        {/* Left — info */}
+        <div style={{ overflowY:'auto', padding:'20px 20px' }}>
+          {/* Chips */}
+          <div style={{ display:'flex', gap:6, flexWrap:'wrap', marginBottom:16 }}>
+            <Tag bg={T.bgInput} color={T.textSub}>{activityLabels[post.activity]}</Tag>
+            <DiffTag diff={post.difficulty}/>
+            <StatusTag status={post.status}/>
+            <Tag bg={T.bgInput} color={T.textSub}>{fmt(post.dateFrom)} — {fmt(post.dateTo)}</Tag>
+            <Tag bg={T.bgInput} color={T.textSub}>{transportLabels[post.transport]}</Tag>
+            {post.budget && <Tag bg={T.goldBg} color={T.gold}>{post.budget}</Tag>}
+          </div>
+
+          {/* Spots bar */}
+          <Card style={{ padding:'14px 16px', marginBottom:16 }}>
+            <div style={{ display:'flex', justifyContent:'space-between', marginBottom:8 }}>
+              <span style={{ fontSize:13, color:T.textSub, fontWeight:600 }}>Участники</span>
+              <span style={{ fontSize:13, color:T.text, fontWeight:800 }}>{post.filledSpots} / {post.totalSpots}</span>
+            </div>
+            <div style={{ height:5, borderRadius:99, background:'rgba(255,255,255,0.06)', overflow:'hidden' }}>
+              <div style={{ height:'100%', borderRadius:99, width:`${fillPct}%`, background:T.accent }}/>
+            </div>
+          </Card>
+
+          {/* Description */}
+          {post.description && (
+            <div style={{ marginBottom:16 }}>
+              <SectionLabel>Описание</SectionLabel>
+              <div style={{ fontSize:14, color:T.textSub, lineHeight:1.65 }}>{post.description}</div>
+            </div>
+          )}
+
+          {/* Organizer */}
+          <div style={{ marginBottom:16 }}>
+            <SectionLabel>Организатор</SectionLabel>
+            <div style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer' }} onClick={()=>onNavigateProfile(post.author.id)}>
+              <Av name={post.author.name} size={38}/>
+              <div>
+                <div style={{ fontSize:14, fontWeight:700, color:T.text }}>{post.author.name}</div>
+                <div style={{ fontSize:12, color:T.textMuted }}>@{post.author.username}</div>
+              </div>
+            </div>
+          </div>
+
+          {/* Participants */}
+          {post.participants.length > 0 && (
+            <div style={{ marginBottom:16 }}>
+              <SectionLabel>Заявки ({post.participants.length})</SectionLabel>
+              <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                {post.participants.map(pt => (
+                  <div key={pt.userId} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background:T.bgInput, borderRadius:12 }}>
+                    <Av name={pt.user.name} size={32}/>
+                    <div style={{ flex:1 }}>
+                      <div style={{ fontSize:13, fontWeight:700, color:T.text, cursor:'pointer' }} onClick={()=>onNavigateProfile(pt.userId)}>{pt.user.name}</div>
+                      <div style={{ fontSize:11, color:T.textMuted }}>@{pt.user.username}</div>
+                    </div>
+                    <Tag color={pt.status==='approved'?T.success:pt.status==='rejected'?T.danger:T.textSub} bg={pt.status==='approved'?T.successBg:pt.status==='rejected'?T.dangerBg:T.bgInput}>
+                      {pt.status==='approved'?'Принят':pt.status==='rejected'?'Отклонён':'Ожидает'}
+                    </Tag>
+                    {isAuthor && pt.status==='pending' && (
+                      <div style={{ display:'flex', gap:6 }}>
+                        <Btn size="sm" onClick={()=>handleApprove(pt.userId)}>✓</Btn>
+                        <Btn size="sm" variant="danger" onClick={()=>handleReject(pt.userId)}>✕</Btn>
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+
+          {/* Actions */}
+          <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
+            {!isAuthor && post.status==='active' && !myParticipant && (
+              <Btn onClick={handleJoin} disabled={joining}>{joining?<Spinner/>:'Подать заявку'}</Btn>
+            )}
+            {myParticipant && (
+              <Tag color={myParticipant.status==='approved'?T.success:T.textSub} bg={myParticipant.status==='approved'?T.successBg:T.bgInput}>
+                Заявка: {myParticipant.status==='approved'?'Принята':myParticipant.status==='rejected'?'Отклонена':'На рассмотрении'}
+              </Tag>
+            )}
+            {isAuthor && <Btn variant="danger" size="sm" onClick={handleDelete}>Удалить</Btn>}
+          </div>
+        </div>
+
+        {/* Right — chat */}
+        <div style={{ borderLeft:`1px solid ${T.border}`, display:'flex', flexDirection:'column', minHeight:0 }}>
+          <div style={{ padding:'14px 16px', borderBottom:`1px solid ${T.border}`, flexShrink:0 }}>
+            <div style={{ fontSize:14, fontWeight:700, color:T.text }}>💬 Чат группы</div>
+            {!canChat && <div style={{ fontSize:12, color:T.textMuted, marginTop:2 }}>Только для участников</div>}
+          </div>
+
+          {canChat ? <>
+            <div style={{ flex:1, overflowY:'auto', padding:'14px 16px', display:'flex', flexDirection:'column', gap:8, background:'rgba(0,0,0,0.15)' }}>
+              {messages.length === 0 && (
+                <div style={{ textAlign:'center', color:T.textMuted, fontSize:13, marginTop:40 }}>Сообщений пока нет</div>
+              )}
+              {messages.map((m, i) => {
+                const mine = m.author.id === currentUser.id;
+                const prev = messages[i-1];
+                const showName = !mine && (!prev || prev.author.id !== m.author.id);
+                return (
+                  <div key={m.id} style={{ display:'flex', flexDirection:mine?'row-reverse':'row', alignItems:'flex-end', gap:6, animation:mine?'msg-in-right 0.25s ease both':'msg-in-left 0.25s ease both' }}>
+                    {!mine && <Av name={m.author.name} size={26}/>}
+                    <div style={{ maxWidth:'75%', display:'flex', flexDirection:'column', alignItems:mine?'flex-end':'flex-start', gap:2 }}>
+                      {showName && <span style={{ fontSize:11, color:T.textMuted, fontWeight:600, marginLeft:4 }}>{m.author.name}</span>}
+                      <div style={{ background:mine?T.bubbleMe:T.bubbleOther, color:mine?'#fff':T.text, borderRadius:mine?'14px 14px 4px 14px':'14px 14px 14px 4px', padding:'9px 13px', fontSize:13, lineHeight:1.5 }}>
+                        {m.text}
+                      </div>
+                      <span style={{ fontSize:10, color:T.textMuted, padding:'0 4px' }}>{new Date(m.createdAt).toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'})}</span>
+                    </div>
+                  </div>
+                );
+              })}
+              <div ref={messagesEndRef}/>
+            </div>
+            <div style={{ padding:'10px 12px', borderTop:`1px solid ${T.border}`, display:'flex', gap:8, flexShrink:0 }}>
+              <input value={msgInput} onChange={e=>setMsgInput(e.target.value)}
+                onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();sendMsg();} }}
+                placeholder="Сообщение…"
+                style={{ flex:1, background:T.bgInput, border:`1.5px solid ${T.border}`, borderRadius:10, padding:'9px 12px', fontSize:13, fontFamily:"'Plus Jakarta Sans',sans-serif", color:T.text, outline:'none' }}/>
+              <button onClick={sendMsg}
+                style={{ width:36, height:36, borderRadius:10, border:'none', background:msgInput.trim()?T.accent:T.bgInput, color:msgInput.trim()?'#fff':T.textMuted, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s' }}>
+                <div style={{ width:16, height:16 }}>{I.send}</div>
+              </button>
+            </div>
+          </> : (
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'center', flex:1, color:T.textMuted, fontSize:14, flexDirection:'column', gap:8 }}>
+              <div style={{ fontSize:28 }}>🔒</div>
+              <div>Вступи в поездку, чтобы написать</div>
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ── CREATE ────────────────────────────────────────────────────────────────────
+function CreatePage({ onDone }) {
+  const [step, setStep] = React.useState(0);
+  const [form, setForm] = React.useState({ activity:'', location:'', region:'', dateFrom:'', dateTo:'', difficulty:'medium', spots:4, transport:'has-seats', budget:'', description:'' });
+  const [errors, setErrors] = React.useState({});
+  const [loading, setLoading] = React.useState(false);
+  const set = k => v => { setForm(f=>({...f,[k]:v})); setErrors(e=>({...e,[k]:false})); };
+
+  const validate = () => {
+    const e = {};
+    if (step===0) { if(!form.activity)e.activity=true; if(!form.location)e.location=true; }
+    if (step===1) { if(!form.dateFrom)e.dateFrom=true; if(!form.dateTo)e.dateTo=true; }
+    setErrors(e);
+    return Object.keys(e).length === 0;
+  };
+
+  const next = () => { if (validate()) setStep(s=>s+1); };
+  const submit = async () => {
+    if (!validate()) return;
+    setLoading(true);
+    try {
+      const res = await api.createPost({ ...form, totalSpots: form.spots, dateFrom: new Date(form.dateFrom).toISOString(), dateTo: new Date(form.dateTo).toISOString(), budget: form.budget||null, description: form.description||null });
+      onDone(res.id);
+    } catch(e) { alert(e.message); }
+    setLoading(false);
+  };
+
+  const activities = [
+    { id:'hiking', label:'🥾 Поход', icon:I.hiking },
+    { id:'skiing', label:'⛷ Лыжи', icon:I.skiing },
+    { id:'snowboard', label:'🏂 Сноуборд', icon:I.snowboard },
+    { id:'trekking', label:'🧗 Трекинг', icon:I.trekking },
+  ];
+
+  const StepDot = ({ i }) => <div style={{ width:i<step?8:i===step?24:8, height:8, borderRadius:99, background:i<=step?T.accent:'rgba(255,255,255,0.1)', transition:'all 0.3s' }}/>;
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', padding:40, display:'flex', justifyContent:'center' }}>
+      <div style={{ width:'100%', maxWidth:600 }}>
+        <div style={{ display:'flex', alignItems:'center', gap:6, marginBottom:28 }}>
+          {[0,1,2].map(i=><StepDot key={i} i={i}/>)}
+          <span style={{ fontSize:13, color:T.textMuted, fontWeight:600, marginLeft:8 }}>Шаг {step+1} из 3</span>
+        </div>
+
+        {step===0 && (
+          <div style={{ animation:'sheet-in 0.3s ease' }}>
+            <div style={{ fontSize:26, fontWeight:800, color:T.text, marginBottom:6 }}>Куда едем?</div>
+            <div style={{ fontSize:15, color:T.textMuted, marginBottom:28 }}>Выбери активность и место</div>
+
+            <div style={{ marginBottom:24 }}>
+              <SectionLabel>Тип активности {errors.activity&&<span style={{color:T.danger}}> — обязательно</span>}</SectionLabel>
+              <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr 1fr', gap:10 }}>
+                {activities.map(a => {
+                  const on = form.activity===a.id;
+                  return <button key={a.id} onClick={()=>set('activity')(a.id)}
+                    style={{ padding:'16px 8px', borderRadius:14, border:`2px solid ${on?T.accent:errors.activity?T.danger:T.border}`, background:on?T.accentBg:T.bgInput, cursor:'pointer', display:'flex', flexDirection:'column', alignItems:'center', gap:8, fontFamily:"'Plus Jakarta Sans',sans-serif", transition:'all 0.15s' }}>
+                    <div style={{ width:28, height:28, color:on?T.accent:T.textSub }}>{a.icon}</div>
+                    <span style={{ fontSize:12, fontWeight:700, color:on?T.accent:T.textSub }}>{a.label}</span>
+                  </button>;
+                })}
+              </div>
+            </div>
+
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:24 }}>
+              <div>
+                <SectionLabel>Локация {errors.location&&<span style={{color:T.danger}}> — обязательно</span>}</SectionLabel>
+                <Input value={form.location} onChange={set('location')} placeholder="Эльбрус, Алматы…" error={errors.location}/>
+              </div>
+              <div>
+                <SectionLabel>Регион / маршрут</SectionLabel>
+                <Input value={form.region} onChange={set('region')} placeholder="Кабардино-Балкария"/>
+              </div>
+            </div>
+
+            <Btn onClick={next} full>Дальше →</Btn>
+          </div>
+        )}
+
+        {step===1 && (
+          <div style={{ animation:'sheet-in 0.3s ease' }}>
+            <div style={{ fontSize:26, fontWeight:800, color:T.text, marginBottom:6 }}>Когда и кто?</div>
+            <div style={{ fontSize:15, color:T.textMuted, marginBottom:28 }}>Даты, уровень и транспорт</div>
+
+            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16, marginBottom:20 }}>
+              <div>
+                <SectionLabel>Дата начала</SectionLabel>
+                <input type="date" value={form.dateFrom} onChange={e=>set('dateFrom')(e.target.value)}
+                  style={{ background:T.bgInput, border:`1.5px solid ${errors.dateFrom?T.danger:T.border}`, borderRadius:12, padding:'11px 14px', fontSize:14, color:T.text, width:'100%', outline:'none', fontFamily:"'Plus Jakarta Sans',sans-serif", colorScheme:'dark' }}/>
+              </div>
+              <div>
+                <SectionLabel>Дата конца</SectionLabel>
+                <input type="date" value={form.dateTo} onChange={e=>set('dateTo')(e.target.value)}
+                  style={{ background:T.bgInput, border:`1.5px solid ${errors.dateTo?T.danger:T.border}`, borderRadius:12, padding:'11px 14px', fontSize:14, color:T.text, width:'100%', outline:'none', fontFamily:"'Plus Jakarta Sans',sans-serif", colorScheme:'dark' }}/>
+              </div>
+            </div>
+
+            <div style={{ marginBottom:20 }}>
+              <SectionLabel>Сложность</SectionLabel>
+              <div style={{ display:'flex', gap:8 }}>
+                {['beginner','medium','pro'].map(d => {
+                  const on = form.difficulty===d;
+                  return <button key={d} onClick={()=>set('difficulty')(d)}
+                    style={{ flex:1, padding:'11px', borderRadius:12, border:`1.5px solid ${on?T.accent:T.border}`, background:on?T.accentBg:T.bgInput, color:on?T.accent:T.textSub, fontFamily:"'Plus Jakarta Sans',sans-serif", fontSize:13, fontWeight:700, cursor:'pointer', transition:'all 0.15s' }}>
+                    {diffLabels[d]}
+                  </button>;
+                })}
+              </div>
+            </div>
+
+            <div style={{ marginBottom:20 }}>
+              <SectionLabel>Всего мест</SectionLabel>
+              <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+                <button onClick={()=>set('spots')(Math.max(2,form.spots-1))} style={{ width:36,height:36,borderRadius:99,border:`1.5px solid ${T.border}`,background:T.bgInput,color:T.text,fontSize:20,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>−</button>
+                <span style={{ fontSize:22, fontWeight:800, color:T.text, minWidth:30, textAlign:'center' }}>{form.spots}</span>
+                <button onClick={()=>set('spots')(Math.min(20,form.spots+1))} style={{ width:36,height:36,borderRadius:99,border:`1.5px solid ${T.border}`,background:T.bgInput,color:T.text,fontSize:20,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>+</button>
+              </div>
+            </div>
+
+            <div style={{ marginBottom:24 }}>
+              <SectionLabel>Транспорт</SectionLabel>
+              {[['has-seats','🚗 Есть места в машине'],['need-ride','🚕 Ищу машину'],['public','🚌 Автобус / поезд']].map(([id,label]) => {
+                const on = form.transport===id;
+                return <button key={id} onClick={()=>set('transport')(id)}
+                  style={{ display:'flex', alignItems:'center', gap:12, width:'100%', padding:'13px 16px', borderRadius:12, border:`1.5px solid ${on?T.accent:T.border}`, background:on?T.accentBg:T.bgInput, color:on?T.accent:T.text, fontFamily:"'Plus Jakarta Sans',sans-serif", fontSize:13, fontWeight:600, cursor:'pointer', marginBottom:8, transition:'all 0.15s' }}>
+                  {on && <div style={{ width:18,height:18,color:T.accent }}>{I.check}</div>}
+                  {label}
+                </button>;
+              })}
+            </div>
+
+            <div style={{ display:'flex', gap:10 }}>
+              <Btn variant="secondary" onClick={()=>setStep(0)}>← Назад</Btn>
+              <Btn onClick={next} full>Дальше →</Btn>
+            </div>
+          </div>
+        )}
+
+        {step===2 && (
+          <div style={{ animation:'sheet-in 0.3s ease' }}>
+            <div style={{ fontSize:26, fontWeight:800, color:T.text, marginBottom:6 }}>Детали</div>
+            <div style={{ fontSize:15, color:T.textMuted, marginBottom:28 }}>Бюджет и описание — необязательно</div>
+
+            <div style={{ marginBottom:20 }}>
+              <SectionLabel>Бюджет</SectionLabel>
+              <Input value={form.budget} onChange={set('budget')} placeholder="~15 000 ₽ на человека"/>
+            </div>
+
+            <div style={{ marginBottom:24 }}>
+              <SectionLabel>Описание</SectionLabel>
+              <Textarea value={form.description} onChange={set('description')} placeholder="Расскажи о маршруте, планах, снаряжении…" rows={5}/>
+            </div>
+
+            {/* Preview */}
+            {form.location && (
+              <Card style={{ padding:16, marginBottom:20, borderColor:T.accent }}>
+                <div style={{ fontSize:11, color:T.textMuted, fontWeight:700, letterSpacing:'0.07em', textTransform:'uppercase', marginBottom:10 }}>Предпросмотр</div>
+                <div style={{ display:'flex', gap:12, alignItems:'center' }}>
+                  <div style={{ width:40,height:40,borderRadius:12,background:T.accentBg,display:'flex',alignItems:'center',justifyContent:'center',color:T.accent }}>
+                    <div style={{ width:22,height:22 }}>{activityIcons[form.activity]||I.mountain}</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize:14, fontWeight:700, color:T.text }}>{form.location}</div>
+                    <div style={{ fontSize:12, color:T.textMuted }}>{form.dateFrom?fmt(form.dateFrom):''} — {form.dateTo?fmt(form.dateTo):''} · {form.spots} мест</div>
+                  </div>
+                  <DiffTag diff={form.difficulty}/>
+                </div>
+              </Card>
+            )}
+
+            <div style={{ display:'flex', gap:10 }}>
+              <Btn variant="secondary" onClick={()=>setStep(1)}>← Назад</Btn>
+              <Btn onClick={submit} disabled={loading} full>{loading?<Spinner/>:'Опубликовать событие'}</Btn>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── CHATS ─────────────────────────────────────────────────────────────────────
+function ChatsPage({ currentUser, connection }) {
+  const [posts, setPosts] = React.useState([]);
+  const [openPost, setOpenPost] = React.useState(null);
+  const [messages, setMessages] = React.useState([]);
+  const [input, setInput] = React.useState('');
+  const [loadingMsg, setLoadingMsg] = React.useState(false);
+  const endRef = React.useRef(null);
+  const openPostRef = React.useRef(null);
+
+  React.useEffect(() => {
+    // Load all posts and check which ones the user can chat in
+    api.getPosts({status:''}).then(async all => {
+      const chatPosts = [];
+      for (const p of all) {
+        if (p.author.id === currentUser.id) { chatPosts.push(p); continue; }
+        // Check full post to see if user is approved participant
+        try {
+          const full = await api.getPost(p.id);
+          const me = full.participants.find(pt => pt.userId === currentUser.id);
+          if (me?.status === 'approved') chatPosts.push(p);
+        } catch {}
+      }
+      setPosts(chatPosts);
+    }).catch(()=>{});
+  }, []);
+
+  const openChat = async (post) => {
+    if (connection && openPostRef.current) connection.invoke('LeavePost', openPostRef.current.id);
+    setOpenPost(post);
+    openPostRef.current = post;
+    setLoadingMsg(true);
+    try { setMessages(await api.getMessages(post.id)); } catch(e) { toast(e.message,'error'); }
+    setLoadingMsg(false);
+    if (connection) connection.invoke('JoinPost', post.id);
+  };
+
+  React.useEffect(() => { endRef.current?.scrollIntoView(); }, [messages]);
+
+  React.useEffect(() => {
+    if (!connection) return;
+    const onMsg = msg => {
+      if (openPostRef.current) setMessages(m => [...m, msg]);
+    };
+    connection.on('NewMessage', onMsg);
+    return () => connection.off('NewMessage', onMsg);
+  }, [connection]);
+
+  const send = async () => {
+    const text = input.trim(); if (!text||!openPost) return;
+    setInput('');
+    try { await api.sendMessage(openPost.id, text); }
+    catch(e) { toast(e.message,'error'); }
+  };
+
+  return (
+    <div style={{ flex:1, display:'flex', minHeight:0 }}>
+      {/* List */}
+      <div style={{ width:300, borderRight:`1px solid ${T.border}`, display:'flex', flexDirection:'column', flexShrink:0 }}>
+        <div style={{ padding:'24px 20px 16px', flexShrink:0 }}>
+          <div style={{ fontSize:22, fontWeight:800, color:T.text }}>Чаты</div>
+          <div style={{ fontSize:13, color:T.textMuted, marginTop:4 }}>Группы событий, в которых ты участвуешь</div>
+        </div>
+        <div style={{ flex:1, overflowY:'auto', padding:'0 12px 16px', display:'flex', flexDirection:'column', gap:4 }}>
+          {posts.length===0 && <div style={{ textAlign:'center', paddingTop:40, color:T.textMuted, fontSize:14 }}>Нет активных чатов</div>}
+          {posts.map(p => (
+            <button key={p.id} onClick={()=>openChat(p)}
+              style={{ textAlign:'left', padding:'12px 14px', borderRadius:14, border:`1.5px solid ${openPost?.id===p.id?T.accent:T.border}`, background:openPost?.id===p.id?T.accentBg:T.bgCard, cursor:'pointer', fontFamily:"'Plus Jakarta Sans',sans-serif", transition:'all 0.15s' }}>
+              <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                <div style={{ width:40,height:40,borderRadius:12,background:T.accentBg,display:'flex',alignItems:'center',justifyContent:'center',color:T.accent,flexShrink:0 }}>
+                  <div style={{ width:22,height:22 }}>{activityIcons[p.activity]}</div>
+                </div>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:T.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{p.location}</div>
+                  <div style={{ fontSize:12, color:T.textMuted }}>{fmt(p.dateFrom)} · {p.filledSpots}/{p.totalSpots} чел.</div>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Chat area */}
+      {openPost ? (
+        <div style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0 }}>
+          <div style={{ padding:'16px 24px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+            <div style={{ width:40,height:40,borderRadius:12,background:T.accentBg,display:'flex',alignItems:'center',justifyContent:'center',color:T.accent }}>
+              <div style={{ width:22,height:22 }}>{activityIcons[openPost.activity]}</div>
+            </div>
+            <div>
+              <div style={{ fontSize:16, fontWeight:700, color:T.text }}>{openPost.location}</div>
+              <div style={{ fontSize:12, color:T.textMuted }}>{fmt(openPost.dateFrom)} — {fmt(openPost.dateTo)}</div>
+            </div>
+          </div>
+
+          <div style={{ flex:1, overflowY:'auto', padding:'16px 24px', display:'flex', flexDirection:'column', gap:8, background:'rgba(0,0,0,0.1)' }}>
+            {messages.length===0 && <div style={{ textAlign:'center', color:T.textMuted, fontSize:14, marginTop:40 }}>Напишите первое сообщение!</div>}
+            {messages.map((m,i) => {
+              const mine = m.author.id === currentUser.id;
+              return (
+                <div key={m.id} style={{ display:'flex', flexDirection:mine?'row-reverse':'row', alignItems:'flex-end', gap:8, animation:mine?'msg-in-right 0.25s ease both':'msg-in-left 0.25s ease both' }}>
+                  {!mine && <Av name={m.author.name} size={28}/>}
+                  <div style={{ maxWidth:'60%', display:'flex', flexDirection:'column', alignItems:mine?'flex-end':'flex-start', gap:3 }}>
+                    {!mine && <span style={{ fontSize:11, color:T.textMuted, fontWeight:600, marginLeft:4 }}>{m.author.name}</span>}
+                    <div style={{ background:mine?T.bubbleMe:T.bubbleOther, color:mine?'#fff':T.text, borderRadius:mine?'16px 16px 4px 16px':'16px 16px 16px 4px', padding:'10px 14px', fontSize:14, lineHeight:1.5 }}>{m.text}</div>
+                    <span style={{ fontSize:10, color:T.textMuted, padding:'0 4px' }}>{new Date(m.createdAt).toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'})}</span>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={endRef}/>
+          </div>
+
+          <div style={{ padding:'12px 24px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, flexShrink:0 }}>
+            <input value={input} onChange={e=>setInput(e.target.value)}
+              onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} }}
+              placeholder="Сообщение… (Enter — отправить)"
+              style={{ flex:1, background:T.bgInput, border:`1.5px solid ${T.border}`, borderRadius:12, padding:'11px 14px', fontSize:14, fontFamily:"'Plus Jakarta Sans',sans-serif", color:T.text, outline:'none' }}/>
+            <button onClick={send}
+              style={{ width:42, height:42, borderRadius:12, border:'none', background:input.trim()?T.accent:T.bgInput, color:input.trim()?'#fff':T.textMuted, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s' }}>
+              <div style={{ width:18,height:18 }}>{I.send}</div>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:12, color:T.textMuted }}>
+          <div style={{ fontSize:36 }}>💬</div>
+          <div style={{ fontSize:15, fontWeight:600 }}>Выбери чат слева</div>
+          <div style={{ fontSize:13 }}>Группы создаются автоматически для каждого события</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ── PROFILE ───────────────────────────────────────────────────────────────────
+function ProfilePage({ userId, currentUser }) {
+  const [user, setUser] = React.useState(null);
+  const [loading, setLoading] = React.useState(true);
+  const [showReviewForm, setShowReviewForm] = React.useState(false);
+  const [reviewForm, setReviewForm] = React.useState({ rating:5, text:'' });
+
+  React.useEffect(() => {
+    setLoading(true);
+    api.getUser(userId).then(u=>{ setUser(u); setLoading(false); }).catch(()=>setLoading(false));
+  }, [userId]);
+
+  const submitReview = async () => {
+    try {
+      await api.createReview({ toUserId: parseInt(userId), postId: 0, rating: reviewForm.rating, text: reviewForm.text });
+      setShowReviewForm(false);
+      const u = await api.getUser(userId);
+      setUser(u);
+    } catch(e) { alert(e.message); }
+  };
+
+  if (loading) return <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center' }}><Spinner/></div>;
+  if (!user) return <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', color:T.textMuted }}>Пользователь не найден</div>;
+
+  const isMe = currentUser.id === user.id;
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', padding:32 }}>
+      <div style={{ maxWidth:900, margin:'0 auto' }}>
+        {/* Header */}
+        <Card style={{ padding:28, marginBottom:24, display:'flex', gap:24, alignItems:'flex-start' }}>
+          <div style={{ position:'relative' }}>
+            <div style={{ width:80, height:80, borderRadius:99, background:avatarColor(user.name), display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, fontWeight:800, color:'rgba(0,0,0,0.5)', border:`3px solid ${T.accent}` }}>
+              {initials(user.name)}
+            </div>
+          </div>
+          <div style={{ flex:1 }}>
+            <div style={{ fontSize:24, fontWeight:800, color:T.text, letterSpacing:'-0.02em' }}>{user.name}</div>
+            <div style={{ fontSize:14, color:T.textMuted, marginTop:2 }}>@{user.username}{user.location?` · 📍 ${user.location}`:''}</div>
+            <div style={{ display:'flex', gap:24, marginTop:16 }}>
+              {[
+                { val: user.rating??0, label:'Рейтинг', suffix:'★' },
+                { val: user.reviewCount??0, label:'Отзывов' },
+              ].map(s => (
+                <div key={s.label}>
+                  <div style={{ fontSize:22, fontWeight:800, color:T.accent }}>{s.val}{s.suffix||''}</div>
+                  <div style={{ fontSize:12, color:T.textMuted, fontWeight:600 }}>{s.label}</div>
+                </div>
+              ))}
+            </div>
+          </div>
+          {!isMe && (
+            <Btn variant="secondary" onClick={()=>setShowReviewForm(true)}>Написать отзыв</Btn>
+          )}
+        </Card>
+
+        {/* Review form */}
+        {showReviewForm && (
+          <Card style={{ padding:24, marginBottom:24, borderColor:T.accent, animation:'sheet-in 0.3s ease' }}>
+            <div style={{ fontSize:16, fontWeight:700, color:T.text, marginBottom:16 }}>Отзыв о {user.name}</div>
+            <div style={{ marginBottom:14 }}>
+              <SectionLabel>Оценка</SectionLabel>
+              <div style={{ display:'flex', gap:8 }}>
+                {[5,4,3,2,1].map(r => (
+                  <button key={r} onClick={()=>setReviewForm(f=>({...f,rating:r}))}
+                    style={{ width:40,height:40,borderRadius:10,border:`1.5px solid ${reviewForm.rating===r?T.gold:T.border}`,background:reviewForm.rating===r?T.goldBg:T.bgInput,color:reviewForm.rating===r?T.gold:T.textSub,fontFamily:"'Plus Jakarta Sans',sans-serif",fontWeight:800,cursor:'pointer' }}>
+                    {r}★
+                  </button>
+                ))}
+              </div>
+            </div>
+            <Textarea value={reviewForm.text} onChange={t=>setReviewForm(f=>({...f,text:t}))} placeholder="Расскажи об опыте совместной поездки…" rows={3}/>
+            <div style={{ display:'flex', gap:10, marginTop:14 }}>
+              <Btn variant="secondary" onClick={()=>setShowReviewForm(false)}>Отмена</Btn>
+              <Btn onClick={submitReview}>Отправить</Btn>
+            </div>
+          </Card>
+        )}
+
+        {/* Reviews */}
+        <SectionLabel>Отзывы ({user.reviewCount??0})</SectionLabel>
+        {(!user.reviews||user.reviews.length===0) ? (
+          <div style={{ color:T.textMuted, fontSize:14, padding:'20px 0' }}>Отзывов пока нет</div>
+        ) : (
+          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+            {user.reviews.map(r => (
+              <Card key={r.id} style={{ padding:18, animation:'fade-in 0.3s ease' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
+                  <Av name={r.from.name} size={34}/>
+                  <div style={{ flex:1 }}>
+                    <div style={{ fontSize:13, fontWeight:700, color:T.text }}>{r.from.name}</div>
+                    <div style={{ fontSize:11, color:T.textMuted }}>{new Date(r.createdAt).toLocaleDateString('ru')}</div>
+                  </div>
+                  <div style={{ fontSize:13, color:T.gold, fontWeight:700 }}>{'★'.repeat(r.rating)}</div>
+                </div>
+                <div style={{ fontSize:13, color:T.textSub, lineHeight:1.6 }}>{r.text}</div>
+              </Card>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── APP ───────────────────────────────────────────────────────────────────────
+function App() {
+  const [user, setUser] = React.useState(() => { try { return JSON.parse(localStorage.getItem('user')); } catch { return null; } });
+  const [page, setPage] = React.useState('feed');
+  const [profileId, setProfileId] = React.useState(null);
+  const [openPostId, setOpenPostId] = React.useState(null);
+  const [theme, setTheme] = React.useState(() => localStorage.getItem('theme')||'dark');
+  const [connection, setConnection] = React.useState(null);
+  const [, forceUpdate] = React.useReducer(x=>x+1, 0);
+
+  React.useEffect(() => {
+    const conn = new signalR.HubConnectionBuilder()
+      .withUrl(BASE + '/hub')
+      .withAutomaticReconnect()
+      .build();
+    conn.start()
+      .then(() => { conn.invoke('JoinFeed'); setConnection(conn); })
+      .catch(() => {});
+    return () => conn.stop();
+  }, []);
+
+  const toggleTheme = () => {
+    const next = theme==='dark'?'light':'dark';
+    localStorage.setItem('theme', next);
+    T = THEMES[next];
+    setTheme(next);
+    document.body.style.background = T.bg;
+    document.body.style.color = T.text;
+    forceUpdate();
+  };
+
+  React.useEffect(() => {
+    document.body.style.background = T.bg;
+    document.body.style.color = T.text;
+  }, []);
+
+  const logout = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+    toast('Вышел из аккаунта');
+  };
+
+  const nav = (p, opts={}) => {
+    setPage(p);
+    if (opts.profileId !== undefined) setProfileId(opts.profileId);
+    else if (p === 'profile') setProfileId(user?.id ?? null);
+    if (p !== 'feed') setOpenPostId(null);
+  };
+
+  if (!user) return <>
+    <AuthPage onAuth={u => { setUser(u); setPage('feed'); toast(`Добро пожаловать, ${u.name}!`); }}/>
+    <ToastContainer/>
+  </>;
+
+  return (
+    <div style={{ display:'flex', height:'100vh', overflow:'hidden', fontFamily:"'Plus Jakarta Sans',sans-serif", background:T.bg, color:T.text }}>
+      <Sidebar
+        page={page}
+        onNav={nav}
+        user={user}
+        onLogout={logout}
+        theme={theme}
+        onToggleTheme={toggleTheme}
+      />
+
+      <div style={{ flex:1, display:'flex', minWidth:0, background:T.bg }}>
+        {page==='feed' && (
+          <>
+            <FeedPage currentUser={user} connection={connection} onOpenPost={id => setOpenPostId(id)}/>
+            {openPostId && (
+              <EventDetailPanel
+                postId={openPostId}
+                currentUser={user}
+                connection={connection}
+                onClose={()=>setOpenPostId(null)}
+                onNavigateProfile={id=>nav('profile',{profileId:id})}
+              />
+            )}
+          </>
+        )}
+        {page==='create' && (
+          <CreatePage onDone={id=>{
+            toast('Событие опубликовано! 🎉');
+            setOpenPostId(id);
+            setPage('feed');
+          }}/>
+        )}
+        {page==='chats' && <ChatsPage currentUser={user} connection={connection}/>}
+        {page==='profile' && <ProfilePage userId={profileId||user.id} currentUser={user}/>}
+      </div>
+
+      <ToastContainer/>
+    </div>
+  );
+}
+
+ReactDOM.createRoot(document.getElementById('root')).render(<App/>);
+</script>
+</body>
+</html>

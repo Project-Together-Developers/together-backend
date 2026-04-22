@@ -2,10 +2,13 @@ using System.IdentityModel.Tokens.Jwt;
 using System.Security.Claims;
 using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.IdentityModel.Tokens;
+using Scalar.AspNetCore;
 using together_api.Data;
 using together_api.DTOs;
+using together_api.Hubs;
 using together_api.Models;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -37,15 +40,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
     });
 
 builder.Services.AddAuthorization();
+builder.Services.AddOpenApi();
+builder.Services.AddSignalR();
 
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureDeleted();
     db.Database.EnsureCreated();
 }
+
+app.MapOpenApi();
+app.MapScalarApiReference();
+app.MapHub<TogetherHub>("/hub");
+
+app.UseDefaultFiles();
+app.UseStaticFiles();
 
 app.UseCors();
 app.UseAuthentication();
@@ -148,9 +159,10 @@ app.MapGet("/posts/{id:int}", async (AppDbContext db, int id) =>
     });
 });
 
-app.MapPost("/posts", async (AppDbContext db, ClaimsPrincipal user, PostCreateDto dto) =>
+app.MapPost("/posts", async (AppDbContext db, ClaimsPrincipal user, PostCreateDto dto, IHubContext<TogetherHub> hub) =>
 {
     var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var author = await db.Users.FindAsync(userId);
 
     var post = new Post
     {
@@ -168,6 +180,14 @@ app.MapPost("/posts", async (AppDbContext db, ClaimsPrincipal user, PostCreateDt
     };
     db.Posts.Add(post);
     await db.SaveChangesAsync();
+
+    await hub.Clients.Group("feed").SendAsync("NewPost", new
+    {
+        post.Id, post.Activity, post.Location, post.Region, post.DateFrom, post.DateTo,
+        post.Difficulty, post.TotalSpots, post.FilledSpots, post.Transport, post.Budget,
+        post.Description, post.Status, post.CreatedAt,
+        Author = new { author!.Id, author.Name, author.Username }
+    });
 
     return Results.Created($"/posts/{post.Id}", new { post.Id });
 }).RequireAuthorization();
@@ -194,7 +214,7 @@ app.MapPut("/posts/{id:int}", async (AppDbContext db, ClaimsPrincipal user, int 
     return Results.NoContent();
 }).RequireAuthorization();
 
-app.MapDelete("/posts/{id:int}", async (AppDbContext db, ClaimsPrincipal user, int id) =>
+app.MapDelete("/posts/{id:int}", async (AppDbContext db, ClaimsPrincipal user, int id, IHubContext<TogetherHub> hub) =>
 {
     var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
     var post = await db.Posts.FindAsync(id);
@@ -203,12 +223,15 @@ app.MapDelete("/posts/{id:int}", async (AppDbContext db, ClaimsPrincipal user, i
 
     db.Posts.Remove(post);
     await db.SaveChangesAsync();
+
+    await hub.Clients.Group("feed").SendAsync("PostDeleted", id);
+
     return Results.NoContent();
 }).RequireAuthorization();
 
 // ── Participants ──────────────────────────────────────────────────────────────
 
-app.MapPost("/posts/{id:int}/join", async (AppDbContext db, ClaimsPrincipal user, int id) =>
+app.MapPost("/posts/{id:int}/join", async (AppDbContext db, ClaimsPrincipal user, int id, IHubContext<TogetherHub> hub) =>
 {
     var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
     var post = await db.Posts.FindAsync(id);
@@ -218,13 +241,22 @@ app.MapPost("/posts/{id:int}/join", async (AppDbContext db, ClaimsPrincipal user
     var exists = await db.Participants.AnyAsync(p => p.PostId == id && p.UserId == userId);
     if (exists) return Results.Conflict("Already joined");
 
+    var joiner = await db.Users.FindAsync(userId);
     db.Participants.Add(new Participant { PostId = id, UserId = userId });
     await db.SaveChangesAsync();
+
+    await hub.Clients.Group($"post-{id}").SendAsync("ParticipantJoined", new
+    {
+        UserId = userId,
+        Status = "pending",
+        User = new { joiner!.Id, joiner.Name, joiner.Username }
+    });
+
     return Results.Ok(new { status = "pending" });
 }).RequireAuthorization();
 
 app.MapPut("/posts/{postId:int}/participants/{targetUserId:int}/approve",
-    async (AppDbContext db, ClaimsPrincipal user, int postId, int targetUserId) =>
+    async (AppDbContext db, ClaimsPrincipal user, int postId, int targetUserId, IHubContext<TogetherHub> hub) =>
 {
     var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
     var post = await db.Posts.FindAsync(postId);
@@ -240,11 +272,20 @@ app.MapPut("/posts/{postId:int}/participants/{targetUserId:int}/approve",
     if (post.FilledSpots >= post.TotalSpots) post.Status = "full";
 
     await db.SaveChangesAsync();
+
+    await hub.Clients.Group($"post-{postId}").SendAsync("ParticipantUpdated", new
+    {
+        UserId = targetUserId,
+        Status = "approved",
+        FilledSpots = post.FilledSpots,
+        PostStatus = post.Status
+    });
+
     return Results.Ok(new { status = "approved" });
 }).RequireAuthorization();
 
 app.MapPut("/posts/{postId:int}/participants/{targetUserId:int}/reject",
-    async (AppDbContext db, ClaimsPrincipal user, int postId, int targetUserId) =>
+    async (AppDbContext db, ClaimsPrincipal user, int postId, int targetUserId, IHubContext<TogetherHub> hub) =>
 {
     var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
     var post = await db.Posts.FindAsync(postId);
@@ -257,6 +298,15 @@ app.MapPut("/posts/{postId:int}/participants/{targetUserId:int}/reject",
 
     participant.Status = "rejected";
     await db.SaveChangesAsync();
+
+    await hub.Clients.Group($"post-{postId}").SendAsync("ParticipantUpdated", new
+    {
+        UserId = targetUserId,
+        Status = "rejected",
+        FilledSpots = post.FilledSpots,
+        PostStatus = post.Status
+    });
+
     return Results.Ok(new { status = "rejected" });
 }).RequireAuthorization();
 
@@ -288,7 +338,7 @@ app.MapGet("/posts/{id:int}/messages", async (AppDbContext db, ClaimsPrincipal u
     return Results.Ok(messages);
 }).RequireAuthorization();
 
-app.MapPost("/posts/{id:int}/messages", async (AppDbContext db, ClaimsPrincipal user, int id, SendMessageDto dto) =>
+app.MapPost("/posts/{id:int}/messages", async (AppDbContext db, ClaimsPrincipal user, int id, SendMessageDto dto, IHubContext<TogetherHub> hub) =>
 {
     var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
     var post = await db.Posts.FindAsync(id);
@@ -300,9 +350,16 @@ app.MapPost("/posts/{id:int}/messages", async (AppDbContext db, ClaimsPrincipal 
 
     if (!isAuthor && !isApproved) return Results.Forbid();
 
+    var author = await db.Users.FindAsync(userId);
     var message = new ChatMessage { PostId = id, AuthorId = userId, Text = dto.Text };
     db.ChatMessages.Add(message);
     await db.SaveChangesAsync();
+
+    await hub.Clients.Group($"post-{id}").SendAsync("NewMessage", new
+    {
+        message.Id, message.Text, message.CreatedAt,
+        Author = new { author!.Id, author.Name, author.Username }
+    });
 
     return Results.Created($"/posts/{id}/messages/{message.Id}", new { message.Id, message.Text, message.CreatedAt });
 }).RequireAuthorization();
