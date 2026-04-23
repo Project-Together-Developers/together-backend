@@ -4,6 +4,7 @@ using System.Text;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.SignalR;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Caching.Memory;
 using Microsoft.IdentityModel.Tokens;
 using Scalar.AspNetCore;
 using together_api.Data;
@@ -42,13 +43,23 @@ builder.Services.AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
 builder.Services.AddAuthorization();
 builder.Services.AddOpenApi();
 builder.Services.AddSignalR();
+builder.Services.AddMemoryCache();
+builder.Services.AddHttpClient("gtickets", c =>
+{
+    c.BaseAddress = new Uri("https://api.gtickets.uz");
+    c.DefaultRequestHeaders.Add("Origin", "https://gtickets.uz");
+    c.DefaultRequestHeaders.Add("Referer", "https://gtickets.uz/");
+    c.DefaultRequestHeaders.Add("User-Agent", "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/146.0.0.0 Safari/537.36");
+    c.DefaultRequestHeaders.Add("Accept", "*/*");
+    c.DefaultRequestHeaders.Add("Accept-Language", "ru-RU,ru;q=0.9");
+});
 
 var app = builder.Build();
 
 using (var scope = app.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<AppDbContext>();
-    db.Database.EnsureCreated();
+    db.Database.Migrate();
 }
 
 app.MapOpenApi();
@@ -66,19 +77,22 @@ app.UseAuthorization();
 
 app.MapPost("/auth/register", async (AppDbContext db, RegisterDto dto) =>
 {
-    if (await db.Users.AnyAsync(u => u.Email == dto.Email))
-        return Results.Conflict("Email already taken");
+    var email = dto.Email.ToLower().Trim();
+    var username = dto.Username.ToLower().Trim();
 
-    if (await db.Users.AnyAsync(u => u.Username == dto.Username))
-        return Results.Conflict("Username already taken");
+    if (await db.Users.AnyAsync(u => u.Email == email))
+        return Results.Conflict("Эта почта уже используется");
+
+    if (await db.Users.AnyAsync(u => u.Username == username))
+        return Results.Conflict("Этот username уже занят");
 
     var user = new User
     {
-        Name = dto.Name,
-        Username = dto.Username,
-        Email = dto.Email,
+        Name = dto.Name.Trim(),
+        Username = username,
+        Email = email,
         PasswordHash = BCrypt.Net.BCrypt.HashPassword(dto.Password),
-        Location = dto.Location ?? ""
+        Location = dto.Location?.Trim() ?? ""
     };
     db.Users.Add(user);
     await db.SaveChangesAsync();
@@ -88,9 +102,10 @@ app.MapPost("/auth/register", async (AppDbContext db, RegisterDto dto) =>
 
 app.MapPost("/auth/login", async (AppDbContext db, LoginDto dto) =>
 {
-    var user = await db.Users.FirstOrDefaultAsync(u => u.Email == dto.Email);
+    var email = dto.Email.ToLower().Trim();
+    var user = await db.Users.FirstOrDefaultAsync(u => u.Email == email);
     if (user is null || !BCrypt.Net.BCrypt.Verify(dto.Password, user.PasswordHash))
-        return Results.Unauthorized();
+        return Results.Json(new { message = "Неверная почта или пароль" }, statusCode: 401);
 
     var claims = new[]
     {
@@ -109,7 +124,7 @@ app.MapPost("/auth/login", async (AppDbContext db, LoginDto dto) =>
     return Results.Ok(new
     {
         token = new JwtSecurityTokenHandler().WriteToken(token),
-        user = new { user.Id, user.Name, user.Username, user.Email, user.Location }
+        user = new { user.Id, user.Name, user.Username, user.Email, user.Location, user.Role }
     });
 });
 
@@ -227,6 +242,19 @@ app.MapDelete("/posts/{id:int}", async (AppDbContext db, ClaimsPrincipal user, i
     await hub.Clients.Group("feed").SendAsync("PostDeleted", id);
 
     return Results.NoContent();
+}).RequireAuthorization();
+
+app.MapPost("/posts/{id:int}/close", async (AppDbContext db, ClaimsPrincipal user, int id) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var post = await db.Posts.FindAsync(id);
+    if (post is null) return Results.NotFound();
+    if (post.AuthorId != userId) return Results.Forbid();
+    if (post.Status == "closed") return Results.Conflict("Поездка уже закрыта");
+
+    post.Status = "closed";
+    await db.SaveChangesAsync();
+    return Results.Ok(new { post.Id, post.Status });
 }).RequireAuthorization();
 
 // ── Participants ──────────────────────────────────────────────────────────────
@@ -391,7 +419,7 @@ app.MapPost("/reviews", async (AppDbContext db, ClaimsPrincipal user, ReviewCrea
     {
         FromUserId = fromUserId,
         ToUserId = dto.ToUserId,
-        PostId = dto.PostId,
+        PostId = dto.PostId > 0 ? dto.PostId : null,
         Rating = dto.Rating,
         Text = dto.Text
     };
@@ -402,6 +430,95 @@ app.MapPost("/reviews", async (AppDbContext db, ClaimsPrincipal user, ReviewCrea
 }).RequireAuthorization();
 
 // ── Profile ───────────────────────────────────────────────────────────────────
+
+app.MapGet("/users/me", async (AppDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var me = await db.Users
+        .Include(u => u.ReviewsReceived).ThenInclude(r => r.FromUser)
+        .FirstOrDefaultAsync(u => u.Id == userId);
+
+    if (me is null) return Results.NotFound();
+
+    var avgRating = me.ReviewsReceived.Count > 0
+        ? me.ReviewsReceived.Average(r => r.Rating)
+        : 0.0;
+
+    var postsCreated = await db.Posts.CountAsync(p => p.AuthorId == userId);
+    var tripsJoined  = await db.Participants.CountAsync(p => p.UserId == userId && p.Status == "approved");
+    var totalTrips   = postsCreated + tripsJoined;
+
+    var topActivity = await db.Posts
+        .Where(p => p.AuthorId == userId)
+        .GroupBy(p => p.Activity)
+        .OrderByDescending(g => g.Count())
+        .Select(g => g.Key)
+        .FirstOrDefaultAsync();
+
+    var since = DateTime.UtcNow.AddMonths(-11);
+    var since1st = new DateTime(since.Year, since.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    var postsByMonth = await db.Posts
+        .Where(p => p.AuthorId == userId && p.CreatedAt >= since1st)
+        .GroupBy(p => new { p.CreatedAt.Year, p.CreatedAt.Month })
+        .Select(g => new { g.Key.Year, g.Key.Month, Count = g.Count() })
+        .ToListAsync();
+
+    var tripsByMonth = await db.Participants
+        .Where(p => p.UserId == userId && p.Status == "approved" && p.JoinedAt >= since1st)
+        .GroupBy(p => new { p.JoinedAt.Year, p.JoinedAt.Month })
+        .Select(g => new { g.Key.Year, g.Key.Month, Count = g.Count() })
+        .ToListAsync();
+
+    var monthlyActivity = Enumerable.Range(0, 12)
+        .Select(i => DateTime.UtcNow.AddMonths(-11 + i))
+        .Select(d => new
+        {
+            Month = $"{d.Year}-{d.Month:D2}",
+            Trips = (postsByMonth.FirstOrDefault(x => x.Year == d.Year && x.Month == d.Month)?.Count ?? 0)
+                  + (tripsByMonth.FirstOrDefault(x => x.Year == d.Year && x.Month == d.Month)?.Count ?? 0)
+        })
+        .ToList();
+
+    var ratingBreakdown = Enumerable.Range(1, 5).Select(star => new
+    {
+        Star = star,
+        Count = me.ReviewsReceived.Count(r => r.Rating == star)
+    }).ToList();
+
+    var badges = new List<string>();
+    if (topActivity is "ski" or "snowboard") badges.Add("Лыжник");
+    if (topActivity is "hiking" or "trekking") badges.Add("Турист");
+    if (postsCreated >= 3) badges.Add("Организатор");
+    if (avgRating >= 4.5 && me.ReviewsReceived.Count >= 3) badges.Add("Надёжный");
+    if (totalTrips >= 10) badges.Add("Опытный");
+
+    return Results.Ok(new
+    {
+        me.Id, me.Name, me.Username, me.Email, me.Location, me.Bio, me.CreatedAt,
+        Rating = Math.Round(avgRating, 1),
+        ReviewCount = me.ReviewsReceived.Count,
+        RatingBreakdown = ratingBreakdown,
+        Stats = new { TotalTrips = totalTrips, PostsCreated = postsCreated, TripsJoined = tripsJoined },
+        TopActivity = topActivity,
+        Badges = badges,
+        MonthlyActivity = monthlyActivity
+    });
+}).RequireAuthorization();
+
+app.MapPut("/users/me", async (AppDbContext db, ClaimsPrincipal user, UpdateProfileDto dto) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var me = await db.Users.FindAsync(userId);
+    if (me is null) return Results.NotFound();
+
+    if (dto.Name is not null) me.Name = dto.Name.Trim();
+    if (dto.Location is not null) me.Location = dto.Location.Trim();
+    if (dto.Bio is not null) me.Bio = dto.Bio.Trim();
+
+    await db.SaveChangesAsync();
+    return Results.Ok(new { me.Id, me.Name, me.Username, me.Email, me.Location });
+}).RequireAuthorization();
 
 app.MapGet("/users/{id:int}", async (AppDbContext db, int id) =>
 {
@@ -415,17 +532,222 @@ app.MapGet("/users/{id:int}", async (AppDbContext db, int id) =>
         ? user.ReviewsReceived.Average(r => r.Rating)
         : 0.0;
 
+    var postsCreated = await db.Posts.CountAsync(p => p.AuthorId == id);
+    var tripsJoined  = await db.Participants.CountAsync(p => p.UserId == id && p.Status == "approved");
+    var totalTrips   = postsCreated + tripsJoined;
+
+    // Топ активность по своим постам
+    var topActivity = await db.Posts
+        .Where(p => p.AuthorId == id)
+        .GroupBy(p => p.Activity)
+        .OrderByDescending(g => g.Count())
+        .Select(g => g.Key)
+        .FirstOrDefaultAsync();
+
+    // Активность по месяцам за последние 12 месяцев
+    var since = DateTime.UtcNow.AddMonths(-11);
+    var since1st = new DateTime(since.Year, since.Month, 1, 0, 0, 0, DateTimeKind.Utc);
+
+    var postsByMonth = await db.Posts
+        .Where(p => p.AuthorId == id && p.CreatedAt >= since1st)
+        .GroupBy(p => new { p.CreatedAt.Year, p.CreatedAt.Month })
+        .Select(g => new { g.Key.Year, g.Key.Month, Count = g.Count() })
+        .ToListAsync();
+
+    var tripsByMonth = await db.Participants
+        .Where(p => p.UserId == id && p.Status == "approved" && p.JoinedAt >= since1st)
+        .GroupBy(p => new { p.JoinedAt.Year, p.JoinedAt.Month })
+        .Select(g => new { g.Key.Year, g.Key.Month, Count = g.Count() })
+        .ToListAsync();
+
+    var monthlyActivity = Enumerable.Range(0, 12)
+        .Select(i => DateTime.UtcNow.AddMonths(-11 + i))
+        .Select(d => new
+        {
+            Month = $"{d.Year}-{d.Month:D2}",
+            Trips = (postsByMonth.FirstOrDefault(x => x.Year == d.Year && x.Month == d.Month)?.Count ?? 0)
+                  + (tripsByMonth.FirstOrDefault(x => x.Year == d.Year && x.Month == d.Month)?.Count ?? 0)
+        })
+        .ToList();
+
+    // Распределение рейтингов
+    var ratingBreakdown = Enumerable.Range(1, 5).Select(star => new
+    {
+        Star = star,
+        Count = user.ReviewsReceived.Count(r => r.Rating == star)
+    }).ToList();
+
+    // Авто-бейджи
+    var badges = new List<string>();
+    if (topActivity is "ski" or "snowboard") badges.Add("Лыжник");
+    if (topActivity is "hiking" or "trekking") badges.Add("Турист");
+    if (postsCreated >= 3) badges.Add("Организатор");
+    if (avgRating >= 4.5 && user.ReviewsReceived.Count >= 3) badges.Add("Надёжный");
+    if (totalTrips >= 10) badges.Add("Опытный");
+
     return Results.Ok(new
     {
-        user.Id, user.Name, user.Username, user.Location, user.CreatedAt,
+        user.Id, user.Name, user.Username, user.Location, user.Bio, user.CreatedAt,
         Rating = Math.Round(avgRating, 1),
         ReviewCount = user.ReviewsReceived.Count,
+        RatingBreakdown = ratingBreakdown,
+        Stats = new { TotalTrips = totalTrips, PostsCreated = postsCreated, TripsJoined = tripsJoined },
+        TopActivity = topActivity,
+        Badges = badges,
+        MonthlyActivity = monthlyActivity,
         Reviews = user.ReviewsReceived.OrderByDescending(r => r.CreatedAt).Take(10).Select(r => new
         {
             r.Id, r.Rating, r.Text, r.CreatedAt,
             From = new { r.FromUser!.Id, r.FromUser.Name, r.FromUser.Username }
         })
     });
+});
+
+// ── Recommendations ───────────────────────────────────────────────────────────
+
+app.MapGet("/recommendations", async (AppDbContext db, string? category) =>
+{
+    var query = db.Recommendations.Include(r => r.CreatedBy).AsQueryable();
+    if (category is not null) query = query.Where(r => r.Category == category);
+
+    var list = await query.OrderByDescending(r => r.CreatedAt).Select(r => new
+    {
+        r.Id, r.Title, r.Description, r.Category, r.ImageUrl, r.Link, r.CreatedAt,
+        r.Duration, r.EventLocation, r.Language, r.Price, r.IsFree,
+        CreatedBy = new { r.CreatedBy!.Id, r.CreatedBy.Name, r.CreatedBy.Username }
+    }).ToListAsync();
+
+    return Results.Ok(list);
+});
+
+app.MapPost("/upload/image", async (HttpRequest request, IWebHostEnvironment env, ClaimsPrincipal user) =>
+{
+    if (!user.Identity!.IsAuthenticated) return Results.Unauthorized();
+    if (!request.HasFormContentType) return Results.BadRequest("Нужен multipart/form-data");
+
+    var form = await request.ReadFormAsync();
+    var file = form.Files.GetFile("image");
+    if (file is null) return Results.BadRequest("Файл не найден");
+
+    const long maxSize = 10 * 1024 * 1024; // 10 MB
+    if (file.Length > maxSize) return Results.BadRequest("Файл слишком большой. Максимум 10 МБ");
+
+    var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+    var allowed = new[] { ".jpg", ".jpeg", ".png", ".webp", ".gif" };
+    if (!allowed.Contains(ext)) return Results.BadRequest("Только JPG, PNG, WEBP, GIF");
+
+    var uploads = Path.Combine(env.WebRootPath, "uploads");
+    Directory.CreateDirectory(uploads);
+
+    var fileName = $"{Guid.NewGuid()}{ext}";
+    var path = Path.Combine(uploads, fileName);
+    await using var stream = File.Create(path);
+    await file.CopyToAsync(stream);
+
+    return Results.Ok(new { url = $"/uploads/{fileName}" });
+}).RequireAuthorization();
+
+app.MapPost("/recommendations", async (AppDbContext db, ClaimsPrincipal user, RecommendationCreateDto dto) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var me = await db.Users.FindAsync(userId);
+    if (me is null) return Results.NotFound();
+    if (me.Role != "editor" && me.Role != "admin") return Results.Forbid();
+
+    var rec = new Recommendation
+    {
+        Title = dto.Title.Trim(),
+        Description = dto.Description.Trim(),
+        Category = dto.Category,
+        ImageUrl = dto.ImageUrl?.Trim(),
+        Link = dto.Link?.Trim(),
+        Duration = dto.Duration?.Trim(),
+        EventLocation = dto.EventLocation?.Trim(),
+        Language = dto.Language?.Trim(),
+        Price = dto.Price,
+        IsFree = dto.IsFree,
+        CreatedById = userId
+    };
+    db.Recommendations.Add(rec);
+    await db.SaveChangesAsync();
+
+    return Results.Created($"/recommendations/{rec.Id}", new { rec.Id });
+}).RequireAuthorization();
+
+app.MapPut("/recommendations/{id:int}", async (AppDbContext db, ClaimsPrincipal user, int id, RecommendationCreateDto dto) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var me = await db.Users.FindAsync(userId);
+    if (me is null) return Results.NotFound();
+    if (me.Role != "editor" && me.Role != "admin") return Results.Forbid();
+
+    var rec = await db.Recommendations.FindAsync(id);
+    if (rec is null) return Results.NotFound();
+    // editor может редактировать только свои
+    if (me.Role == "editor" && rec.CreatedById != userId) return Results.Forbid();
+
+    rec.Title = dto.Title.Trim();
+    rec.Description = dto.Description.Trim();
+    rec.Category = dto.Category;
+    rec.ImageUrl = dto.ImageUrl?.Trim();
+    rec.Link = dto.Link?.Trim();
+    rec.Duration = dto.Duration?.Trim();
+    rec.EventLocation = dto.EventLocation?.Trim();
+    rec.Language = dto.Language?.Trim();
+    rec.Price = dto.Price;
+    rec.IsFree = dto.IsFree;
+    await db.SaveChangesAsync();
+
+    return Results.NoContent();
+}).RequireAuthorization();
+
+app.MapDelete("/recommendations/{id:int}", async (AppDbContext db, ClaimsPrincipal user, int id) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var me = await db.Users.FindAsync(userId);
+    if (me is null) return Results.NotFound();
+    if (me.Role != "editor" && me.Role != "admin") return Results.Forbid();
+
+    var rec = await db.Recommendations.FindAsync(id);
+    if (rec is null) return Results.NotFound();
+    // editor может удалять только свои
+    if (me.Role == "editor" && rec.CreatedById != userId) return Results.Forbid();
+
+    db.Recommendations.Remove(rec);
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+}).RequireAuthorization();
+
+// ── GTickets proxy ────────────────────────────────────────────────────────────
+
+app.MapGet("/gtickets/events", async (IHttpClientFactory factory, IMemoryCache cache) =>
+{
+    if (cache.TryGetValue("gt_events", out object? cachedObj) && cachedObj is string cached)
+        return Results.Content(cached!, "application/json");
+    var client = factory.CreateClient("gtickets");
+    try
+    {
+        var response = await client.GetAsync("/api/playbill3?aggregatorid=6");
+        var content = await response.Content.ReadAsStringAsync();
+        cache.Set("gt_events", content, TimeSpan.FromMinutes(20));
+        return Results.Content(content, "application/json");
+    }
+    catch (Exception ex) { return Results.Problem(ex.Message); }
+});
+
+app.MapGet("/gtickets/theater", async (IHttpClientFactory factory, IMemoryCache cache) =>
+{
+    if (cache.TryGetValue("gt_theater", out object? cachedObj2) && cachedObj2 is string cached)
+        return Results.Content(cached!, "application/json");
+    var client = factory.CreateClient("gtickets");
+    try
+    {
+        var response = await client.GetAsync("/api/theaterevents?aggregatorid=6");
+        var content = await response.Content.ReadAsStringAsync();
+        cache.Set("gt_theater", content, TimeSpan.FromMinutes(20));
+        return Results.Content(content, "application/json");
+    }
+    catch (Exception ex) { return Results.Problem(ex.Message); }
 });
 
 app.Run();

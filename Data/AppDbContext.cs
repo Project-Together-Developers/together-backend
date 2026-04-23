@@ -10,6 +10,7 @@ public class AppDbContext(DbContextOptions<AppDbContext> options) : DbContext(op
     public DbSet<Participant> Participants => Set<Participant>();
     public DbSet<ChatMessage> ChatMessages => Set<ChatMessage>();
     public DbSet<Review> Reviews => Set<Review>();
+    public DbSet<Recommendation> Recommendations => Set<Recommendation>();
 
     protected override void OnModelCreating(ModelBuilder model)
     {

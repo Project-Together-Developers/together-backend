@@ -12,3 +12,9 @@ public record LoginDto(
     string Email,
     string Password
 );
+
+public record UpdateProfileDto(
+    string? Name,
+    string? Location,
+    string? Bio
+);

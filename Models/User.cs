@@ -8,6 +8,8 @@ public class User
     public string Email { get; set; } = "";
     public string PasswordHash { get; set; } = "";
     public string Location { get; set; } = "";
+    public string Bio { get; set; } = "";
+    public string Role { get; set; } = "user"; // user / editor / admin
     public DateTime CreatedAt { get; set; } = DateTime.UtcNow;
 
     public ICollection<Post> Posts { get; set; } = [];

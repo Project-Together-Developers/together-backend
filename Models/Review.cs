@@ -7,7 +7,7 @@ public class Review
     public User? ToUser { get; set; }
     public int FromUserId { get; set; } // кто оставляет
     public User? FromUser { get; set; }
-    public int PostId { get; set; }     // по какой поездке
+    public int? PostId { get; set; }     // по какой поездке (необязательно)
     public Post? Post { get; set; }
     public int Rating { get; set; }     // 1–5
     public string Text { get; set; } = "";
