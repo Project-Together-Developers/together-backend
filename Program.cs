@@ -124,7 +124,7 @@ app.MapPost("/auth/login", async (AppDbContext db, LoginDto dto) =>
     return Results.Ok(new
     {
         token = new JwtSecurityTokenHandler().WriteToken(token),
-        user = new { user.Id, user.Name, user.Username, user.Email, user.Location, user.Role }
+        user = new { user.Id, user.Name, user.Username, user.Email, user.Location, user.Role, user.IsVerified }
     });
 });
 
@@ -144,8 +144,8 @@ app.MapGet("/posts", async (AppDbContext db, string? activity, string? difficult
     {
         p.Id, p.Activity, p.Location, p.Region, p.DateFrom, p.DateTo,
         p.Difficulty, p.TotalSpots, p.FilledSpots, p.Transport, p.Budget,
-        p.Description, p.Status, p.CreatedAt,
-        Author = new { p.Author!.Id, p.Author.Name, p.Author.Username }
+        p.Description, p.Status, p.CreatedAt, p.RequiresSafety,
+        Author = new { p.Author!.Id, p.Author.Name, p.Author.Username, p.Author.AvatarUrl, p.Author.IsVerified }
     }).ToListAsync();
 
     return Results.Ok(posts);
@@ -164,12 +164,12 @@ app.MapGet("/posts/{id:int}", async (AppDbContext db, int id) =>
     {
         post.Id, post.Activity, post.Location, post.Region, post.DateFrom, post.DateTo,
         post.Difficulty, post.TotalSpots, post.FilledSpots, post.Transport, post.Budget,
-        post.Description, post.Status, post.CreatedAt,
-        Author = new { post.Author!.Id, post.Author.Name, post.Author.Username },
+        post.Description, post.Status, post.CreatedAt, post.RequiresSafety,
+        Author = new { post.Author!.Id, post.Author.Name, post.Author.Username, post.Author.AvatarUrl, post.Author.IsVerified },
         Participants = post.Participants.Select(p => new
         {
             p.UserId, p.Status, p.JoinedAt,
-            User = new { p.User!.Id, p.User.Name, p.User.Username }
+            User = new { p.User!.Id, p.User.Name, p.User.Username, p.User.AvatarUrl, p.User.IsVerified }
         })
     });
 });
@@ -191,6 +191,7 @@ app.MapPost("/posts", async (AppDbContext db, ClaimsPrincipal user, PostCreateDt
         Transport = dto.Transport,
         Budget = dto.Budget,
         Description = dto.Description,
+        RequiresSafety = dto.RequiresSafety,
         AuthorId = userId
     };
     db.Posts.Add(post);
@@ -200,8 +201,8 @@ app.MapPost("/posts", async (AppDbContext db, ClaimsPrincipal user, PostCreateDt
     {
         post.Id, post.Activity, post.Location, post.Region, post.DateFrom, post.DateTo,
         post.Difficulty, post.TotalSpots, post.FilledSpots, post.Transport, post.Budget,
-        post.Description, post.Status, post.CreatedAt,
-        Author = new { author!.Id, author.Name, author.Username }
+        post.Description, post.Status, post.CreatedAt, post.RequiresSafety,
+        Author = new { author!.Id, author.Name, author.Username, author.AvatarUrl, author.IsVerified }
     });
 
     return Results.Created($"/posts/{post.Id}", new { post.Id });
@@ -270,6 +271,8 @@ app.MapPost("/posts/{id:int}/join", async (AppDbContext db, ClaimsPrincipal user
     if (exists) return Results.Conflict("Already joined");
 
     var joiner = await db.Users.FindAsync(userId);
+    if (post.RequiresSafety && !(joiner?.IsVerified ?? false))
+        return Results.Json(new { message = "Это событие только для верифицированных пользователей" }, statusCode: 403);
     db.Participants.Add(new Participant { PostId = id, UserId = userId });
     await db.SaveChangesAsync();
 
@@ -277,7 +280,7 @@ app.MapPost("/posts/{id:int}/join", async (AppDbContext db, ClaimsPrincipal user
     {
         UserId = userId,
         Status = "pending",
-        User = new { joiner!.Id, joiner.Name, joiner.Username }
+        User = new { joiner!.Id, joiner.Name, joiner.Username, joiner.AvatarUrl }
     });
 
     return Results.Ok(new { status = "pending" });
@@ -299,6 +302,14 @@ app.MapPut("/posts/{postId:int}/participants/{targetUserId:int}/approve",
     post.FilledSpots++;
     if (post.FilledSpots >= post.TotalSpots) post.Status = "full";
 
+    var notif = new Notification
+    {
+        UserId = targetUserId,
+        Type = "participant_approved",
+        Message = $"Вас одобрили для участия в событии: {post.Location}!",
+        RelatedPostId = postId
+    };
+    db.Notifications.Add(notif);
     await db.SaveChangesAsync();
 
     await hub.Clients.Group($"post-{postId}").SendAsync("ParticipantUpdated", new
@@ -307,6 +318,10 @@ app.MapPut("/posts/{postId:int}/participants/{targetUserId:int}/approve",
         Status = "approved",
         FilledSpots = post.FilledSpots,
         PostStatus = post.Status
+    });
+    await hub.Clients.Group($"user-{targetUserId}").SendAsync("NewNotification", new
+    {
+        notif.Id, notif.Type, notif.Message, notif.CreatedAt, notif.IsRead, notif.RelatedPostId
     });
 
     return Results.Ok(new { status = "approved" });
@@ -359,7 +374,7 @@ app.MapGet("/posts/{id:int}/messages", async (AppDbContext db, ClaimsPrincipal u
         .Select(m => new
         {
             m.Id, m.Text, m.CreatedAt,
-            Author = new { m.Author!.Id, m.Author.Name, m.Author.Username }
+            Author = new { m.Author!.Id, m.Author.Name, m.Author.Username, m.Author.AvatarUrl, m.Author.IsVerified }
         })
         .ToListAsync();
 
@@ -386,7 +401,7 @@ app.MapPost("/posts/{id:int}/messages", async (AppDbContext db, ClaimsPrincipal 
     await hub.Clients.Group($"post-{id}").SendAsync("NewMessage", new
     {
         message.Id, message.Text, message.CreatedAt,
-        Author = new { author!.Id, author.Name, author.Username }
+        Author = new { author!.Id, author.Name, author.Username, author.AvatarUrl, author.IsVerified }
     });
 
     return Results.Created($"/posts/{id}/messages/{message.Id}", new { message.Id, message.Text, message.CreatedAt });
@@ -403,7 +418,7 @@ app.MapGet("/users/{id:int}/reviews", async (AppDbContext db, int id) =>
         .Select(r => new
         {
             r.Id, r.Rating, r.Text, r.CreatedAt,
-            From = new { r.FromUser!.Id, r.FromUser.Name, r.FromUser.Username }
+            From = new { r.FromUser!.Id, r.FromUser.Name, r.FromUser.Username, r.FromUser.AvatarUrl }
         })
         .ToListAsync();
 
@@ -447,6 +462,8 @@ app.MapGet("/users/me", async (AppDbContext db, ClaimsPrincipal user) =>
     var postsCreated = await db.Posts.CountAsync(p => p.AuthorId == userId);
     var tripsJoined  = await db.Participants.CountAsync(p => p.UserId == userId && p.Status == "approved");
     var totalTrips   = postsCreated + tripsJoined;
+    var friendsCount = await db.Friendships.CountAsync(f =>
+        (f.RequesterId == userId || f.AddresseeId == userId) && f.Status == "accepted");
 
     var topActivity = await db.Posts
         .Where(p => p.AuthorId == userId)
@@ -495,11 +512,12 @@ app.MapGet("/users/me", async (AppDbContext db, ClaimsPrincipal user) =>
 
     return Results.Ok(new
     {
-        me.Id, me.Name, me.Username, me.Email, me.Location, me.Bio, me.CreatedAt,
+        me.Id, me.Name, me.Username, me.Email, me.Location, me.Bio, me.CreatedAt, me.AvatarUrl,
+        me.IsVerified, me.Role,
         Rating = Math.Round(avgRating, 1),
         ReviewCount = me.ReviewsReceived.Count,
         RatingBreakdown = ratingBreakdown,
-        Stats = new { TotalTrips = totalTrips, PostsCreated = postsCreated, TripsJoined = tripsJoined },
+        Stats = new { TotalTrips = totalTrips, PostsCreated = postsCreated, TripsJoined = tripsJoined, FriendsCount = friendsCount },
         TopActivity = topActivity,
         Badges = badges,
         MonthlyActivity = monthlyActivity
@@ -535,6 +553,8 @@ app.MapGet("/users/{id:int}", async (AppDbContext db, int id) =>
     var postsCreated = await db.Posts.CountAsync(p => p.AuthorId == id);
     var tripsJoined  = await db.Participants.CountAsync(p => p.UserId == id && p.Status == "approved");
     var totalTrips   = postsCreated + tripsJoined;
+    var friendsCount = await db.Friendships.CountAsync(f =>
+        (f.RequesterId == id || f.AddresseeId == id) && f.Status == "accepted");
 
     // Топ активность по своим постам
     var topActivity = await db.Posts
@@ -585,23 +605,168 @@ app.MapGet("/users/{id:int}", async (AppDbContext db, int id) =>
     if (avgRating >= 4.5 && user.ReviewsReceived.Count >= 3) badges.Add("Надёжный");
     if (totalTrips >= 10) badges.Add("Опытный");
 
+    // Ghost stats
+    var ghostConf = await db.AttendanceConfirmations
+        .Where(a => a.TargetUserId == id)
+        .GroupBy(a => a.PostId)
+        .ToListAsync();
+    var ghostEvents = ghostConf.Count(g => { var l = g.ToList(); return l.Count(x => !x.WasPresent) > l.Count / 2.0; });
+    var ghostPercent = ghostConf.Count > 0 ? (int)Math.Round((double)ghostEvents / ghostConf.Count * 100) : 0;
+
     return Results.Ok(new
     {
-        user.Id, user.Name, user.Username, user.Location, user.Bio, user.CreatedAt,
+        user.Id, user.Name, user.Username, user.Location, user.Bio, user.CreatedAt, user.AvatarUrl,
+        user.IsVerified, user.Role,
         Rating = Math.Round(avgRating, 1),
         ReviewCount = user.ReviewsReceived.Count,
         RatingBreakdown = ratingBreakdown,
-        Stats = new { TotalTrips = totalTrips, PostsCreated = postsCreated, TripsJoined = tripsJoined },
+        Stats = new { TotalTrips = totalTrips, PostsCreated = postsCreated, TripsJoined = tripsJoined, FriendsCount = friendsCount },
         TopActivity = topActivity,
         Badges = badges,
         MonthlyActivity = monthlyActivity,
+        GhostPercent = ghostPercent,
+        GhostEvents = ghostEvents,
+        TotalConfirmedEvents = ghostConf.Count,
         Reviews = user.ReviewsReceived.OrderByDescending(r => r.CreatedAt).Take(10).Select(r => new
         {
             r.Id, r.Rating, r.Text, r.CreatedAt,
-            From = new { r.FromUser!.Id, r.FromUser.Name, r.FromUser.Username }
+            From = new { r.FromUser!.Id, r.FromUser.Name, r.FromUser.Username, r.FromUser.AvatarUrl }
         })
     });
 });
+
+// ── Verification ──────────────────────────────────────────────────────────────
+
+app.MapGet("/verification/my", async (AppDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var req = await db.VerificationRequests
+        .Where(v => v.UserId == userId)
+        .OrderByDescending(v => v.CreatedAt)
+        .FirstOrDefaultAsync();
+    if (req is null) return Results.Ok(new { status = "none" });
+    return Results.Ok(new { req.Id, req.Status, req.RejectionReason, req.CreatedAt, req.ReviewedAt });
+}).RequireAuthorization();
+
+app.MapPost("/verification/submit", async (HttpRequest request, AppDbContext db, ClaimsPrincipal user, IWebHostEnvironment env) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+
+    // Нельзя подать повторно если уже pending или approved
+    var existing = await db.VerificationRequests
+        .Where(v => v.UserId == userId && (v.Status == "pending" || v.Status == "approved"))
+        .FirstOrDefaultAsync();
+    if (existing is not null)
+        return Results.Conflict("Заявка уже существует");
+
+    if (!request.HasFormContentType) return Results.BadRequest("Нужен multipart/form-data");
+    var form = await request.ReadFormAsync();
+
+    var fullName = form["fullName"].ToString().Trim();
+    var passportNumber = form["passportNumber"].ToString().Trim();
+    var birthDate = form["birthDate"].ToString().Trim();
+
+    if (string.IsNullOrEmpty(fullName) || string.IsNullOrEmpty(passportNumber) || string.IsNullOrEmpty(birthDate))
+        return Results.BadRequest("Заполните все поля");
+
+    var passportFile = form.Files.GetFile("passportPhoto");
+    var selfieFile = form.Files.GetFile("selfiePhoto");
+    if (passportFile is null || selfieFile is null)
+        return Results.BadRequest("Загрузите оба фото");
+
+    var uploads = Path.Combine(env.WebRootPath, "uploads");
+    Directory.CreateDirectory(uploads);
+
+    async Task<string> SaveFile(IFormFile file)
+    {
+        var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+        var name = $"{Guid.NewGuid()}{ext}";
+        var path = Path.Combine(uploads, name);
+        await using var stream = File.Create(path);
+        await file.CopyToAsync(stream);
+        return $"/uploads/{name}";
+    }
+
+    var passportUrl = await SaveFile(passportFile);
+    var selfieUrl = await SaveFile(selfieFile);
+
+    var verification = new VerificationRequest
+    {
+        UserId = userId,
+        FullName = fullName,
+        PassportNumber = passportNumber,
+        BirthDate = birthDate,
+        PassportPhotoUrl = passportUrl,
+        SelfiePhotoUrl = selfieUrl
+    };
+    db.VerificationRequests.Add(verification);
+    await db.SaveChangesAsync();
+
+    return Results.Created($"/verification/{verification.Id}", new { verification.Id });
+}).RequireAuthorization();
+
+app.MapGet("/verification/requests", async (AppDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var me = await db.Users.FindAsync(userId);
+    if (me is null || (me.Role != "admin" && me.Role != "moderation_staff"))
+        return Results.Forbid();
+
+    var requests = await db.VerificationRequests
+        .Include(v => v.User)
+        .OrderByDescending(v => v.CreatedAt)
+        .Select(v => new
+        {
+            v.Id, v.Status, v.FullName, v.PassportNumber, v.BirthDate,
+            v.PassportPhotoUrl, v.SelfiePhotoUrl, v.RejectionReason,
+            v.CreatedAt, v.ReviewedAt,
+            User = new { v.User!.Id, v.User.Name, v.User.Username, v.User.AvatarUrl }
+        })
+        .ToListAsync();
+
+    return Results.Ok(requests);
+}).RequireAuthorization();
+
+app.MapPost("/verification/{id:int}/approve", async (AppDbContext db, ClaimsPrincipal user, int id) =>
+{
+    var modId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var mod = await db.Users.FindAsync(modId);
+    if (mod is null || (mod.Role != "admin" && mod.Role != "moderation_staff"))
+        return Results.Forbid();
+
+    var req = await db.VerificationRequests.Include(v => v.User).FirstOrDefaultAsync(v => v.Id == id);
+    if (req is null) return Results.NotFound();
+    if (req.Status != "pending") return Results.Conflict("Уже обработано");
+
+    req.Status = "approved";
+    req.ReviewedById = modId;
+    req.ReviewedAt = DateTime.UtcNow;
+
+    if (req.User is not null) req.User.IsVerified = true;
+
+    await db.SaveChangesAsync();
+    return Results.Ok(new { req.Id, req.Status });
+}).RequireAuthorization();
+
+app.MapPost("/verification/{id:int}/reject", async (AppDbContext db, ClaimsPrincipal user, int id, RejectVerificationDto dto) =>
+{
+    var modId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var mod = await db.Users.FindAsync(modId);
+    if (mod is null || (mod.Role != "admin" && mod.Role != "moderation_staff"))
+        return Results.Forbid();
+
+    var req = await db.VerificationRequests.FirstOrDefaultAsync(v => v.Id == id);
+    if (req is null) return Results.NotFound();
+    if (req.Status != "pending") return Results.Conflict("Уже обработано");
+
+    req.Status = "rejected";
+    req.RejectionReason = dto.Reason;
+    req.ReviewedById = modId;
+    req.ReviewedAt = DateTime.UtcNow;
+
+    await db.SaveChangesAsync();
+    return Results.Ok(new { req.Id, req.Status });
+}).RequireAuthorization();
 
 // ── Recommendations ───────────────────────────────────────────────────────────
 
@@ -718,6 +883,291 @@ app.MapDelete("/recommendations/{id:int}", async (AppDbContext db, ClaimsPrincip
     return Results.NoContent();
 }).RequireAuthorization();
 
+// ── Avatar upload ─────────────────────────────────────────────────────────────
+
+app.MapPost("/upload/avatar", async (HttpRequest request, IWebHostEnvironment env, ClaimsPrincipal user, AppDbContext db, IHubContext<TogetherHub> hub) =>
+{
+    if (!user.Identity!.IsAuthenticated) return Results.Unauthorized();
+    if (!request.HasFormContentType) return Results.BadRequest("Нужен multipart/form-data");
+
+    var form = await request.ReadFormAsync();
+    var file = form.Files.GetFile("avatar");
+    if (file is null) return Results.BadRequest("Файл не найден");
+
+    const long maxSize = 10 * 1024 * 1024;
+    if (file.Length > maxSize) return Results.BadRequest("Файл слишком большой. Максимум 10 МБ");
+
+    var ext = Path.GetExtension(file.FileName).ToLowerInvariant();
+    var allowed = new[] { ".jpg", ".jpeg", ".png", ".webp" };
+    if (!allowed.Contains(ext)) return Results.BadRequest("Только JPG, PNG, WEBP");
+
+    var avatars = Path.Combine(env.WebRootPath, "avatars");
+    Directory.CreateDirectory(avatars);
+
+    var fileName = $"{Guid.NewGuid()}{ext}";
+    var path = Path.Combine(avatars, fileName);
+    await using var stream = File.Create(path);
+    await file.CopyToAsync(stream);
+
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var me = await db.Users.FindAsync(userId);
+    if (me is null) return Results.NotFound();
+    me.AvatarUrl = $"/avatars/{fileName}";
+    await db.SaveChangesAsync();
+
+    // Уведомляем всех друзей об обновлении аватара (реал-тайм)
+    var friends = await db.Friendships
+        .Where(f => (f.RequesterId == userId || f.AddresseeId == userId) && f.Status == "accepted")
+        .ToListAsync();
+    var payload = new { UserId = userId, AvatarUrl = me.AvatarUrl };
+    await hub.Clients.Group($"user-{userId}").SendAsync("AvatarUpdated", payload);
+    foreach (var fr in friends)
+    {
+        var fid = fr.RequesterId == userId ? fr.AddresseeId : fr.RequesterId;
+        await hub.Clients.Group($"user-{fid}").SendAsync("AvatarUpdated", payload);
+    }
+
+    return Results.Ok(new { url = me.AvatarUrl });
+}).RequireAuthorization();
+
+// ── Friends ───────────────────────────────────────────────────────────────────
+
+app.MapGet("/friends", async (AppDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var friends = await db.Friendships
+        .Where(f => (f.RequesterId == userId || f.AddresseeId == userId) && f.Status == "accepted")
+        .Include(f => f.Requester).Include(f => f.Addressee)
+        .ToListAsync();
+
+    var result = friends.Select(f =>
+    {
+        var friend = f.RequesterId == userId ? f.Addressee! : f.Requester!;
+        return new { friend.Id, friend.Name, friend.Username, friend.AvatarUrl, FriendshipId = f.Id };
+    });
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+app.MapGet("/friends/requests", async (AppDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var requests = await db.Friendships
+        .Where(f => f.AddresseeId == userId && f.Status == "pending")
+        .Include(f => f.Requester)
+        .ToListAsync();
+
+    var result = requests.Select(f => new
+    {
+        f.Id, f.CreatedAt,
+        From = new { f.Requester!.Id, f.Requester.Name, f.Requester.Username, f.Requester.AvatarUrl }
+    });
+    return Results.Ok(result);
+}).RequireAuthorization();
+
+// Статус дружбы с конкретным пользователем
+app.MapGet("/friends/status/{targetId:int}", async (AppDbContext db, ClaimsPrincipal user, int targetId) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var f = await db.Friendships.FirstOrDefaultAsync(f =>
+        (f.RequesterId == userId && f.AddresseeId == targetId) ||
+        (f.RequesterId == targetId && f.AddresseeId == userId));
+
+    if (f is null) return Results.Ok(new { status = "none" });
+    return Results.Ok(new { status = f.Status, isSender = f.RequesterId == userId, friendshipId = f.Id });
+}).RequireAuthorization();
+
+app.MapPost("/friends/request/{targetId:int}", async (AppDbContext db, ClaimsPrincipal user, int targetId, IHubContext<TogetherHub> hub) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    if (userId == targetId) return Results.BadRequest("Нельзя добавить себя");
+
+    var exists = await db.Friendships.AnyAsync(f =>
+        (f.RequesterId == userId && f.AddresseeId == targetId) ||
+        (f.RequesterId == targetId && f.AddresseeId == userId));
+    if (exists) return Results.Conflict("Запрос уже существует");
+
+    var requester = await db.Users.FindAsync(userId);
+    var f = new Friendship { RequesterId = userId, AddresseeId = targetId };
+    db.Friendships.Add(f);
+
+    var notif = new Notification
+    {
+        UserId = targetId,
+        Type = "friend_request",
+        Message = $"{requester!.Name} отправил(а) вам запрос в друзья",
+        RelatedUserId = userId,
+        RelatedFriendshipId = 0
+    };
+    db.Notifications.Add(notif);
+    await db.SaveChangesAsync();
+
+    notif.RelatedFriendshipId = f.Id;
+    await db.SaveChangesAsync();
+
+    await hub.Clients.Group($"user-{targetId}").SendAsync("NewNotification", new
+    {
+        notif.Id, notif.Type, notif.Message, notif.CreatedAt, notif.IsRead,
+        notif.RelatedUserId, RelatedFriendshipId = f.Id
+    });
+
+    return Results.Ok(new { status = "pending", friendshipId = f.Id });
+}).RequireAuthorization();
+
+app.MapPut("/friends/{friendshipId:int}/accept", async (AppDbContext db, ClaimsPrincipal user, int friendshipId, IHubContext<TogetherHub> hub) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var f = await db.Friendships.FindAsync(friendshipId);
+    if (f is null) return Results.NotFound();
+    if (f.AddresseeId != userId) return Results.Forbid();
+    f.Status = "accepted";
+
+    var accepter = await db.Users.FindAsync(userId);
+    var notif = new Notification
+    {
+        UserId = f.RequesterId,
+        Type = "friend_accepted",
+        Message = $"{accepter!.Name} принял(а) ваш запрос в друзья",
+        RelatedUserId = userId
+    };
+    db.Notifications.Add(notif);
+    await db.SaveChangesAsync();
+
+    await hub.Clients.Group($"user-{f.RequesterId}").SendAsync("NewNotification", new
+    {
+        notif.Id, notif.Type, notif.Message, notif.CreatedAt, notif.IsRead, notif.RelatedUserId
+    });
+    // Уведомляем обоих что дружба принята (для обновления UI)
+    await hub.Clients.Group($"user-{f.RequesterId}").SendAsync("FriendAccepted", new { userId, friendshipId });
+    await hub.Clients.Group($"user-{userId}").SendAsync("FriendAccepted", new { userId = f.RequesterId, friendshipId });
+
+    return Results.Ok(new { status = "accepted" });
+}).RequireAuthorization();
+
+app.MapDelete("/friends/{friendshipId:int}", async (AppDbContext db, ClaimsPrincipal user, int friendshipId) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var f = await db.Friendships.FindAsync(friendshipId);
+    if (f is null) return Results.NotFound();
+    if (f.RequesterId != userId && f.AddresseeId != userId) return Results.Forbid();
+    db.Friendships.Remove(f);
+    await db.SaveChangesAsync();
+    return Results.NoContent();
+}).RequireAuthorization();
+
+// ── Direct Messages ───────────────────────────────────────────────────────────
+
+app.MapGet("/dm/{targetId:int}", async (AppDbContext db, ClaimsPrincipal user, int targetId) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    // Только друзья могут писать
+    var areFriends = await db.Friendships.AnyAsync(f =>
+        ((f.RequesterId == userId && f.AddresseeId == targetId) ||
+         (f.RequesterId == targetId && f.AddresseeId == userId)) && f.Status == "accepted");
+    if (!areFriends) return Results.Forbid();
+
+    var messages = await db.DirectMessages
+        .Where(m => (m.SenderId == userId && m.ReceiverId == targetId) ||
+                    (m.SenderId == targetId && m.ReceiverId == userId))
+        .Include(m => m.Sender)
+        .OrderBy(m => m.CreatedAt)
+        .Select(m => new
+        {
+            m.Id, m.Text, m.CreatedAt,
+            Sender = new { m.Sender!.Id, m.Sender.Name, m.Sender.Username, m.Sender.AvatarUrl }
+        })
+        .ToListAsync();
+    return Results.Ok(messages);
+}).RequireAuthorization();
+
+app.MapPost("/dm/{targetId:int}", async (AppDbContext db, ClaimsPrincipal user, int targetId, SendMessageDto dto, IHubContext<TogetherHub> hub) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    // Только друзья могут писать
+    var areFriends = await db.Friendships.AnyAsync(f =>
+        ((f.RequesterId == userId && f.AddresseeId == targetId) ||
+         (f.RequesterId == targetId && f.AddresseeId == userId)) && f.Status == "accepted");
+    if (!areFriends) return Results.Forbid();
+
+    var sender = await db.Users.FindAsync(userId);
+    var msg = new DirectMessage { SenderId = userId, ReceiverId = targetId, Text = dto.Text.Trim() };
+    db.DirectMessages.Add(msg);
+    await db.SaveChangesAsync();
+
+    var payload = new
+    {
+        msg.Id, msg.Text, msg.CreatedAt,
+        Sender = new { sender!.Id, sender.Name, sender.Username, sender.AvatarUrl }
+    };
+    // Отправляем обоим участникам через SignalR
+    await hub.Clients.Group($"dm-{Math.Min(userId, targetId)}-{Math.Max(userId, targetId)}").SendAsync("NewDM", payload);
+    return Results.Ok(payload);
+}).RequireAuthorization();
+
+// ── Friends list of any user ──────────────────────────────────────────────────
+
+app.MapGet("/users/{id:int}/friends", async (AppDbContext db, int id) =>
+{
+    var friends = await db.Friendships
+        .Where(f => (f.RequesterId == id || f.AddresseeId == id) && f.Status == "accepted")
+        .Include(f => f.Requester).Include(f => f.Addressee)
+        .ToListAsync();
+
+    var result = friends.Select(f =>
+    {
+        var friend = f.RequesterId == id ? f.Addressee! : f.Requester!;
+        return new { friend.Id, friend.Name, friend.Username, friend.AvatarUrl, FriendshipId = f.Id };
+    });
+    return Results.Ok(result);
+});
+
+// ── Notifications ─────────────────────────────────────────────────────────────
+
+app.MapGet("/notifications", async (AppDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var notifs = await db.Notifications
+        .Where(n => n.UserId == userId)
+        .OrderByDescending(n => n.CreatedAt)
+        .Take(50)
+        .Select(n => new { n.Id, n.Type, n.Message, n.IsRead, n.CreatedAt, n.RelatedUserId, n.RelatedPostId, n.RelatedFriendshipId })
+        .ToListAsync();
+    return Results.Ok(notifs);
+}).RequireAuthorization();
+
+app.MapPut("/notifications/read-all", async (AppDbContext db, ClaimsPrincipal user) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    await db.Notifications
+        .Where(n => n.UserId == userId && !n.IsRead)
+        .ExecuteUpdateAsync(s => s.SetProperty(n => n.IsRead, true));
+    return Results.NoContent();
+}).RequireAuthorization();
+
+app.MapPost("/notifications/broadcast", async (AppDbContext db, ClaimsPrincipal user, IHubContext<TogetherHub> hub, BroadcastDto dto) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var me = await db.Users.FindAsync(userId);
+    if (me is null || me.Role != "admin") return Results.Forbid();
+
+    var allUserIds = await db.Users.Where(u => u.Id != userId).Select(u => u.Id).ToListAsync();
+    var notifications = allUserIds.Select(uid => new Notification
+    {
+        UserId = uid,
+        Type = "admin_broadcast",
+        Message = dto.Message.Trim()
+    }).ToList();
+    db.Notifications.AddRange(notifications);
+    await db.SaveChangesAsync();
+
+    foreach (var notif in notifications)
+        await hub.Clients.Group($"user-{notif.UserId}").SendAsync("NewNotification", new
+        {
+            notif.Id, notif.Type, notif.Message, notif.CreatedAt, notif.IsRead
+        });
+
+    return Results.Ok(new { sent = notifications.Count });
+}).RequireAuthorization();
+
 // ── GTickets proxy ────────────────────────────────────────────────────────────
 
 app.MapGet("/gtickets/events", async (IHttpClientFactory factory, IMemoryCache cache) =>
@@ -748,6 +1198,128 @@ app.MapGet("/gtickets/theater", async (IHttpClientFactory factory, IMemoryCache 
         return Results.Content(content, "application/json");
     }
     catch (Exception ex) { return Results.Problem(ex.Message); }
+});
+
+// ── Leaderboard ───────────────────────────────────────────────────────────────
+
+app.MapGet("/leaderboard", async (AppDbContext db, string? period) =>
+{
+    var now = DateTime.UtcNow;
+    DateTime since = period switch
+    {
+        "week"  => now.AddDays(-7),
+        "month" => now.AddDays(-30),
+        _       => DateTime.MinValue
+    };
+
+    var postCounts = await db.Posts
+        .Where(p => p.CreatedAt >= since)
+        .GroupBy(p => p.AuthorId)
+        .Select(g => new { UserId = g.Key, Count = g.Count() })
+        .ToListAsync();
+
+    var joinCounts = await db.Participants
+        .Where(p => p.Status == "approved" && p.JoinedAt >= since)
+        .GroupBy(p => p.UserId)
+        .Select(g => new { UserId = g.Key, Count = g.Count() })
+        .ToListAsync();
+
+    var userIds = postCounts.Select(x => x.UserId)
+        .Union(joinCounts.Select(x => x.UserId))
+        .Distinct().ToList();
+
+    var users = await db.Users
+        .Where(u => userIds.Contains(u.Id))
+        .Select(u => new { u.Id, u.Name, u.Username, u.AvatarUrl, u.IsVerified })
+        .ToListAsync();
+
+    var result = users.Select(u =>
+    {
+        var posts  = postCounts.FirstOrDefault(x => x.UserId == u.Id)?.Count ?? 0;
+        var joined = joinCounts.FirstOrDefault(x => x.UserId == u.Id)?.Count ?? 0;
+        return new { u.Id, u.Name, u.Username, u.AvatarUrl, u.IsVerified, Score = posts + joined, PostsCreated = posts, TripsJoined = joined };
+    })
+    .OrderByDescending(x => x.Score)
+    .Take(20)
+    .Select((x, i) => new { Rank = i + 1, x.Id, x.Name, x.Username, x.AvatarUrl, x.IsVerified, x.Score, x.PostsCreated, x.TripsJoined })
+    .ToList();
+
+    return Results.Ok(result);
+});
+
+// ── Attendance (Ghost system) ─────────────────────────────────────────────────
+
+app.MapGet("/posts/{id:int}/attendance", async (AppDbContext db, ClaimsPrincipal user, int id) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var post = await db.Posts.Include(p => p.Participants).FirstOrDefaultAsync(p => p.Id == id);
+    if (post is null) return Results.NotFound();
+
+    var isParticipant = post.AuthorId == userId || post.Participants.Any(p => p.UserId == userId && p.Status == "approved");
+    if (!isParticipant) return Results.Forbid();
+
+    var myConfirmations = await db.AttendanceConfirmations
+        .Where(a => a.PostId == id && a.ConfirmerUserId == userId)
+        .Select(a => new { a.TargetUserId, a.WasPresent })
+        .ToListAsync();
+
+    return Results.Ok(new { alreadySubmitted = myConfirmations.Count > 0, confirmations = myConfirmations });
+}).RequireAuthorization();
+
+app.MapPost("/posts/{id:int}/attendance", async (AppDbContext db, ClaimsPrincipal user, int id, AttendanceDto dto) =>
+{
+    var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
+    var post = await db.Posts.Include(p => p.Participants).FirstOrDefaultAsync(p => p.Id == id);
+    if (post is null) return Results.NotFound();
+    if (post.Status != "past" && post.Status != "closed") return Results.BadRequest("Событие ещё не завершено");
+
+    var isParticipant = post.AuthorId == userId || post.Participants.Any(p => p.UserId == userId && p.Status == "approved");
+    if (!isParticipant) return Results.Forbid();
+
+    var alreadySubmitted = await db.AttendanceConfirmations.AnyAsync(a => a.PostId == id && a.ConfirmerUserId == userId);
+    if (alreadySubmitted) return Results.Conflict("Вы уже отметили посещаемость");
+
+    // Получаем всех одобренных участников + автора
+    var approvedIds = post.Participants.Where(p => p.Status == "approved").Select(p => p.UserId).ToList();
+    approvedIds.Add(post.AuthorId);
+
+    foreach (var targetId in approvedIds)
+    {
+        if (targetId == userId) continue;
+        var wasPresent = dto.PresentUserIds.Contains(targetId);
+        db.AttendanceConfirmations.Add(new AttendanceConfirmation
+        {
+            PostId = id,
+            ConfirmerUserId = userId,
+            TargetUserId = targetId,
+            WasPresent = wasPresent
+        });
+    }
+    await db.SaveChangesAsync();
+
+    return Results.Ok();
+}).RequireAuthorization();
+
+app.MapGet("/users/{id:int}/ghost", async (AppDbContext db, int id) =>
+{
+    var confirmations = await db.AttendanceConfirmations
+        .Where(a => a.TargetUserId == id)
+        .GroupBy(a => a.PostId)
+        .ToListAsync();
+
+    if (confirmations.Count == 0)
+        return Results.Ok(new { ghostPercent = 0, ghostEvents = 0, totalConfirmedEvents = 0 });
+
+    var ghostEvents = 0;
+    foreach (var group in confirmations)
+    {
+        var list = group.ToList();
+        var absentVotes = list.Count(x => !x.WasPresent);
+        if (absentVotes > list.Count / 2.0) ghostEvents++;
+    }
+
+    var ghostPercent = (int)Math.Round((double)ghostEvents / confirmations.Count * 100);
+    return Results.Ok(new { ghostPercent, ghostEvents, totalConfirmedEvents = confirmations.Count });
 });
 
 app.Run();

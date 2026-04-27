@@ -10,5 +10,6 @@ public record PostCreateDto(
     int TotalSpots,
     string Transport,
     string? Budget,
-    string? Description
+    string? Description,
+    bool RequiresSafety = false
 );

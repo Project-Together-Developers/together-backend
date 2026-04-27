@@ -21,12 +21,28 @@ body{background:#09090F;color:#F0EFE9;}
 @keyframes sheet-in{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
 @keyframes panel-in{from{transform:translateX(40px);opacity:0}to{transform:translateX(0);opacity:1}}
 @keyframes fade-in{from{opacity:0}to{opacity:1}}
-@keyframes toast-in{from{transform:translateY(20px);opacity:0}to{transform:translateY(0);opacity:1}}
 @keyframes bar-grow{from{transform:scaleY(0)}to{transform:scaleY(1)}}
-@keyframes msg-in-right{from{transform:translateX(16px) scale(0.95);opacity:0}to{transform:translateX(0) scale(1);opacity:1}}
-@keyframes msg-in-left{from{transform:translateX(-16px) scale(0.95);opacity:0}to{transform:translateX(0) scale(1);opacity:1}}
 @keyframes pop{from{transform:scale(0.8);opacity:0}to{transform:scale(1);opacity:1}}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes float-y{0%,100%{transform:translateY(0) scale(1)}50%{transform:translateY(-20px) scale(1.04)}}
+@keyframes orb-drift{0%,100%{transform:translate(0,0) scale(1)}25%{transform:translate(45px,-55px) scale(1.18)}50%{transform:translate(-15px,-30px) scale(0.85)}75%{transform:translate(-45px,35px) scale(1.12)}}
+@keyframes orb-drift2{0%,100%{transform:translate(0,0) scale(1)}33%{transform:translate(-60px,45px) scale(1.2)}66%{transform:translate(55px,-25px) scale(0.9)}}
+@keyframes logo-shift{0%,100%{background-position:0% 50%}50%{background-position:100% 50%}}
+@keyframes card-rise{from{transform:translateY(24px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes page-enter{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slide-up{from{transform:translateY(36px);opacity:0}to{transform:translateY(0);opacity:1}}
+@keyframes bounce-in{0%{transform:scale(0.78) translateY(10px);opacity:0}65%{transform:scale(1.04) translateY(-2px)}100%{transform:scale(1) translateY(0);opacity:1}}
+@keyframes ripple-out{from{transform:translate(-50%,-50%) scale(0);opacity:0.45}to{transform:translate(-50%,-50%) scale(5);opacity:0}}
+@keyframes shimmer-swipe{from{transform:translateX(-120%)}to{transform:translateX(220%)}}
+@keyframes twinkle{0%,100%{opacity:0.08;transform:scale(0.5)}50%{opacity:0.55;transform:scale(1)}}
+@keyframes count-in{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
+@keyframes glow-ring{0%,100%{box-shadow:0 0 0 0 oklch(0.72 0.18 38 / 0.4)}50%{box-shadow:0 0 0 8px oklch(0.72 0.18 38 / 0)}}
+@keyframes msg-in-right{0%{transform:translateX(20px) scale(0.88);opacity:0}70%{transform:translateX(-2px) scale(1.02)}100%{transform:translateX(0) scale(1);opacity:1}}
+@keyframes msg-in-left{0%{transform:translateX(-20px) scale(0.88);opacity:0}70%{transform:translateX(2px) scale(1.02)}100%{transform:translateX(0) scale(1);opacity:1}}
+@keyframes toast-in{0%{transform:translateY(20px) scale(0.88);opacity:0}70%{transform:translateY(-3px) scale(1.02)}100%{transform:translateY(0) scale(1);opacity:1}}
+.search-glow:focus-within{border-color:oklch(0.72 0.18 38)!important;box-shadow:0 0 0 3px oklch(0.72 0.18 38 / 0.15)!important;}
+.anim-logo{background:linear-gradient(90deg,oklch(0.72 0.18 38),oklch(0.85 0.22 60),oklch(0.72 0.2 300),oklch(0.72 0.18 38));background-size:300% 100%;-webkit-background-clip:text;-webkit-text-fill-color:transparent;background-clip:text;animation:logo-shift 5s ease infinite;}
+.page-anim{animation:page-enter 0.4s cubic-bezier(0.22,1,0.36,1) both;}
 textarea::-webkit-scrollbar{display:none;}
 .light-mode{filter:none;}
 body.light{background:#F7F6F2;color:#1A1916;}
@@ -80,6 +96,55 @@ const api = {
   },
   getGTicketsEvents: () => req('GET', '/gtickets/events'),
   getGTicketsTheater: () => req('GET', '/gtickets/theater'),
+  // Friends
+  getFriends: () => req('GET', '/friends'),
+  getFriendRequests: () => req('GET', '/friends/requests'),
+  getFriendStatus: id => req('GET', `/friends/status/${id}`),
+  sendFriendRequest: id => req('POST', `/friends/request/${id}`),
+  acceptFriend: id => req('PUT', `/friends/${id}/accept`),
+  removeFriend: id => req('DELETE', `/friends/${id}`),
+  // DM
+  getDM: id => req('GET', `/dm/${id}`),
+  sendDM: (id, text) => req('POST', `/dm/${id}`, { text }),
+  // Avatar
+  uploadAvatar: async (file) => {
+    const token = localStorage.getItem('token');
+    const fd = new FormData(); fd.append('avatar', file);
+    const res = await fetch('/upload/avatar', { method:'POST', headers:{ Authorization:`Bearer ${token}` }, body:fd });
+    const data = await res.json();
+    if (!res.ok) throw new Error(data.message || 'Ошибка загрузки');
+    return data.url;
+  },
+  // Notifications
+  getNotifications: () => req('GET', '/notifications'),
+  markAllRead: () => req('PUT', '/notifications/read-all'),
+  broadcast: msg => req('POST', '/notifications/broadcast', { message: msg }),
+  // Friends of any user
+  getUserFriends: id => req('GET', `/users/${id}/friends`),
+  // Leaderboard
+  getLeaderboard: period => req('GET', `/leaderboard?period=${period||'all'}`),
+  // Ghost / Attendance
+  getGhostStats: id => req('GET', `/users/${id}/ghost`),
+  getAttendance: id => req('GET', `/posts/${id}/attendance`),
+  submitAttendance: (id, presentUserIds) => req('POST', `/posts/${id}/attendance`, { presentUserIds }),
+  // Verification
+  getMyVerification: () => req('GET', '/verification/my'),
+  submitVerification: async (data) => {
+    const token = localStorage.getItem('token');
+    const fd = new FormData();
+    fd.append('fullName', data.fullName);
+    fd.append('passportNumber', data.passportNumber);
+    fd.append('birthDate', data.birthDate);
+    fd.append('passportPhoto', data.passportPhoto);
+    fd.append('selfiePhoto', data.selfiePhoto);
+    const res = await fetch('/verification/submit', { method:'POST', headers:{ Authorization:`Bearer ${token}` }, body:fd });
+    const json = await res.json();
+    if (!res.ok) throw new Error(json.message || 'Ошибка отправки');
+    return json;
+  },
+  getVerificationRequests: () => req('GET', '/verification/requests'),
+  approveVerification: id => req('POST', `/verification/${id}/approve`),
+  rejectVerification: (id, reason) => req('POST', `/verification/${id}/reject`, { reason }),
 };
 
 // ── Theme ─────────────────────────────────────────────────────────────────────
@@ -156,25 +221,61 @@ function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').re
 function initials(name) { return (name||'?').split(' ').map(w=>w[0]).join('').slice(0,2).toUpperCase(); }
 function avatarColor(name) { return T.avatarPalette[(name||'').charCodeAt(0) % T.avatarPalette.length]; }
 
+// Глобальный кеш аватаров — обновляется через SignalR
+const _avatarCache = new Map();
+let _avatarCacheVersion = 0;
+let _avatarCacheListeners = new Set();
+function setAvatarCache(userId, url) {
+  _avatarCache.set(userId, url);
+  _avatarCacheVersion++;
+  _avatarCacheListeners.forEach(fn => fn(_avatarCacheVersion));
+}
+function useAvatarCache() {
+  const [v, setV] = React.useState(_avatarCacheVersion);
+  React.useEffect(() => {
+    _avatarCacheListeners.add(setV);
+    return () => _avatarCacheListeners.delete(setV);
+  }, []);
+  return v;
+}
+
 // ── Shared UI ─────────────────────────────────────────────────────────────────
-function Av({ name, size=36 }) {
+function Av({ name, size=36, url, userId }) {
+  useAvatarCache();
+  const resolved = (userId && _avatarCache.has(userId)) ? _avatarCache.get(userId) : url;
+  if (resolved) return <img src={resolved} alt={name} style={{ width:size, height:size, borderRadius:99, objectFit:'cover', flexShrink:0, border:`2px solid ${T.border}` }} onError={e=>{ e.target.style.display='none'; }}/>;
   return <div style={{ width:size, height:size, borderRadius:99, background:avatarColor(name||''), display:'flex', alignItems:'center', justifyContent:'center', fontSize:size*0.35, fontWeight:800, color:'rgba(0,0,0,0.5)', flexShrink:0 }}>{initials(name)}</div>;
 }
 
 function Spinner() {
-  return <div style={{ width:20, height:20, border:'2px solid rgba(255,255,255,0.1)', borderTopColor:T.accent, borderRadius:99, animation:'spin 0.6s linear infinite', display:'inline-block' }}/>;
+  return <div style={{ width:20, height:20, border:'2.5px solid rgba(255,255,255,0.08)', borderTopColor:T.accent, borderRightColor:T.accent+'88', borderRadius:99, animation:'spin 0.7s cubic-bezier(0.5,0,0.5,1) infinite', display:'inline-block' }}/>;
 }
 
 function Btn({ children, onClick, variant='primary', size='md', disabled, full, style={} }) {
-  const base = { display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6, borderRadius:14, fontFamily:"'Plus Jakarta Sans',sans-serif", fontWeight:700, cursor:disabled?'not-allowed':'pointer', border:'none', transition:'all 0.15s', opacity:disabled?0.5:1, ...style };
+  const [pressed, setPressed] = React.useState(false);
+  const [ripple, setRipple] = React.useState(null);
+  const btnRef = React.useRef(null);
+  const base = { display:'inline-flex', alignItems:'center', justifyContent:'center', gap:6, borderRadius:14, fontFamily:"'Plus Jakarta Sans',sans-serif", fontWeight:700, cursor:disabled?'not-allowed':'pointer', border:'none', transition:'transform 0.15s cubic-bezier(0.34,1.56,0.64,1), box-shadow 0.15s, opacity 0.15s', opacity:disabled?0.5:1, position:'relative', overflow:'hidden', transform:pressed?'scale(0.93)':'scale(1)', ...style };
   const sz = size==='sm' ? { padding:'7px 14px', fontSize:13 } : { padding:'12px 22px', fontSize:15 };
   const variants = {
-    primary: { background:T.accent, color:'#fff', boxShadow:`0 4px 16px ${T.accent}44` },
+    primary: { background:T.accent, color:'#fff', boxShadow:pressed?`0 1px 4px ${T.accent}44`:`0 4px 16px ${T.accent}55` },
     secondary: { background:T.bgInput, color:T.text, border:`1.5px solid ${T.border}` },
     danger: { background:T.dangerBg, color:T.danger },
     ghost: { background:'transparent', color:T.textSub },
   };
-  return <button onClick={onClick} disabled={disabled} style={{ ...base, ...sz, ...variants[variant], ...(full?{width:'100%'}:{}) }}>{children}</button>;
+  const handleMouseDown = e => {
+    setPressed(true);
+    const rect = btnRef.current?.getBoundingClientRect();
+    if (rect) { const id = Date.now(); setRipple({ x:e.clientX-rect.left, y:e.clientY-rect.top, id }); setTimeout(()=>setRipple(null), 650); }
+  };
+  return (
+    <button ref={btnRef} onClick={onClick} disabled={disabled}
+      onMouseDown={handleMouseDown} onMouseUp={()=>setPressed(false)} onMouseLeave={()=>setPressed(false)}
+      style={{ ...base, ...sz, ...variants[variant], ...(full?{width:'100%'}:{}) }}>
+      {ripple && <span key={ripple.id} style={{ position:'absolute', left:ripple.x, top:ripple.y, width:8, height:8, borderRadius:99, background:'rgba(255,255,255,0.45)', pointerEvents:'none', animation:'ripple-out 0.6s ease-out forwards' }}/>}
+      {children}
+    </button>
+  );
 }
 
 function Input({ value, onChange, placeholder, type='text', error }) {
@@ -198,6 +299,12 @@ function Select({ value, onChange, options }) {
   </select>;
 }
 
+function VerifiedBadge() {
+  return <span title="Верифицирован" style={{ display:'inline-flex', alignItems:'center', justifyContent:'center', width:16, height:16, borderRadius:99, background:'#5B8FD4', flexShrink:0 }}>
+    <svg viewBox="0 0 12 12" width="9" height="9" fill="none"><polyline points="2,6 5,9 10,3" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>
+  </span>;
+}
+
 function Tag({ children, color, bg }) {
   return <span style={{ display:'inline-block', padding:'4px 10px', borderRadius:99, fontSize:12, fontWeight:700, color:color||T.textSub, background:bg||T.bgInput, flexShrink:0 }}>{children}</span>;
 }
@@ -215,7 +322,12 @@ function StatusTag({ status }) {
 }
 
 function Card({ children, style={}, onClick }) {
-  return <div onClick={onClick} style={{ background:T.bgCard, border:`1.5px solid ${T.border}`, borderRadius:18, boxShadow:T.shadow, ...style }}>{children}</div>;
+  const [hov, setHov] = React.useState(false);
+  const clickable = !!onClick;
+  return <div onClick={onClick}
+    onMouseEnter={clickable?()=>setHov(true):undefined}
+    onMouseLeave={clickable?()=>setHov(false):undefined}
+    style={{ background:T.bgCard, border:`1.5px solid ${hov?T.accent:T.border}`, borderRadius:18, boxShadow:hov?'0 20px 60px rgba(0,0,0,0.55)':T.shadow, transition:'border-color 0.2s ease, box-shadow 0.2s ease', cursor:clickable?'pointer':'default', ...style }}>{children}</div>;
 }
 
 function SectionLabel({ children }) {
@@ -246,13 +358,26 @@ function AuthPage({ onAuth }) {
 
   return (
     <div style={{ minHeight:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:`radial-gradient(ellipse at 30% 40%, oklch(0.28 0.08 38) 0%, ${T.bg} 60%)` }}>
-      <Card style={{ padding:40, width:420 }}>
-        <div style={{ fontSize:28, fontWeight:800, color:T.accent, marginBottom:4 }}>Together</div>
+      {/* Анимированные орбы */}
+      {[0,1,2,3,4].map(i=>(
+        <div key={i} style={{position:'fixed',borderRadius:'50%',filter:'blur(70px)',pointerEvents:'none',zIndex:0,
+          background:['oklch(0.72 0.18 38)','oklch(0.82 0.22 60)','oklch(0.65 0.15 280)','oklch(0.72 0.18 38)','oklch(0.65 0.18 155)'][i],
+          opacity:[0.18,0.14,0.12,0.1,0.1][i],
+          width:[380,280,320,240,260][i]+'px',height:[380,280,320,240,260][i]+'px',
+          left:['12%','68%','38%','82%','8%'][i],top:['18%','62%','78%','12%','55%'][i],
+          animation:`${i%2===0?'orb-drift':'orb-drift2'} ${9+i*2.5}s ease-in-out infinite`,animationDelay:i*1.8+'s'}}/>
+      ))}
+      {/* Мерцающие звёзды */}
+      {[...Array(16)].map((_,i)=>{const x=(i*37+13)%100;const y=(i*53+27)%100;return(
+        <div key={'s'+i} style={{position:'fixed',width:2,height:2,borderRadius:'50%',background:'rgba(255,255,255,0.9)',left:x+'%',top:y+'%',pointerEvents:'none',zIndex:0,animation:`twinkle ${1.8+i*0.28}s ease-in-out infinite`,animationDelay:i*0.22+'s'}}/>
+      );})}
+      <Card style={{ padding:40, width:420, position:'relative', zIndex:1, animation:'slide-up 0.7s cubic-bezier(0.34,1.56,0.64,1) both' }}>
+        <div className="anim-logo" style={{ fontSize:28, fontWeight:800, marginBottom:4 }}>Together</div>
         <div style={{ fontSize:14, color:T.textMuted, marginBottom:28 }}>
           {mode==='login' ? 'Войди в свой аккаунт' : 'Создай аккаунт и ищи напарников'}
         </div>
 
-        <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+        <div style={{ display:'flex', flexDirection:'column', gap:14, animation:'page-enter 0.5s ease both', animationDelay:'0.15s' }}>
           {mode==='register' && <>
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
               <Input value={form.name} onChange={set('name')} placeholder="Имя"/>
@@ -283,7 +408,7 @@ function ToastContainer() {
   return (
     <div style={{ position:'fixed', bottom:24, right:24, zIndex:9999, display:'flex', flexDirection:'column', gap:8, pointerEvents:'none' }}>
       {toasts.map(t => (
-        <div key={t.id} style={{ padding:'12px 18px', borderRadius:12, background:t.type==='error'?T.dangerBg:T.accentBg, color:t.type==='error'?T.danger:T.accent, border:`1px solid ${t.type==='error'?T.danger:T.accent}33`, fontSize:14, fontWeight:600, animation:'toast-in 0.3s ease', boxShadow:T.shadow, maxWidth:320 }}>
+        <div key={t.id} style={{ padding:'12px 20px', borderRadius:14, background:t.type==='error'?T.dangerBg:T.accentBg, color:t.type==='error'?T.danger:T.accent, border:`1.5px solid ${t.type==='error'?T.danger:T.accent}55`, fontSize:14, fontWeight:600, animation:'toast-in 0.4s cubic-bezier(0.34,1.56,0.64,1)', boxShadow:t.type==='error'?`0 8px 32px ${T.danger}33`:`0 8px 32px ${T.accent}33`, maxWidth:320, backdropFilter:'blur(12px)' }}>
           {t.msg}
         </div>
       ))}
@@ -298,41 +423,75 @@ function toast(msg, type='success') {
 }
 
 // ── SIDEBAR ───────────────────────────────────────────────────────────────────
-function Sidebar({ page, onNav, user, onLogout, theme, onToggleTheme }) {
-  const items = [
-    { id:'feed', icon:I.home, label:'Лента' },
-    { id:'recs', icon:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>, label:'Куда сходить' },
-    { id:'chats', icon:I.chat, label:'Чаты' },
-    { id:'profile', icon:I.profile, label:'Профиль' },
-  ];
+function Badge({ count }) {
+  if (!count || count === 0) return null;
+  const label = count > 99 ? '99+' : String(count);
+  return <span style={{ minWidth:18, height:18, borderRadius:99, background:T.danger, color:'#fff', fontSize:10, fontWeight:800, display:'inline-flex', alignItems:'center', justifyContent:'center', padding:'0 5px', lineHeight:1, flexShrink:0 }}>{label}</span>;
+}
+
+function Sidebar({ page, onNav, user, onLogout, theme, onToggleTheme, unreadDmCount, unreadNotifCount, onOpenNotifications, avatarUrl }) {
+  const bellIcon = <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.73 21a2 2 0 01-3.46 0"/></svg>;
   const moonIcon = <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M21 12.79A9 9 0 1111.21 3a7 7 0 0010 9.79z"/></svg>;
   const sunIcon = <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>;
+
+  const trophyIcon = <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polyline points="8 17 12 21 16 17"/><line x1="12" y1="12" x2="12" y2="21"/><path d="M20.88 18.09A5 5 0 0 0 18 9h-1.26A8 8 0 1 0 3 16.29"/></svg>;
+  const navItems = [
+    { id:'feed', icon:I.home, label:'Лента' },
+    { id:'recs', icon:<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>, label:'Куда сходить' },
+    { id:'chats', icon:I.chat, label:'Чаты', badge: unreadDmCount },
+    { id:'leaderboard', icon:trophyIcon, label:'Топ гуляльщиков' },
+    { id:'profile', icon:I.profile, label:'Профиль' },
+  ];
 
   return (
     <div style={{ width:220, background:T.bgCard, borderRight:`1px solid ${T.border}`, display:'flex', flexDirection:'column', padding:'24px 14px', flexShrink:0, height:'100vh', position:'sticky', top:0 }}>
       <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'0 10px', marginBottom:28 }}>
-        <div style={{ fontSize:22, fontWeight:800, color:T.accent }}>Together</div>
-        <button onClick={onToggleTheme} title={theme==='dark'?'Светлая тема':'Тёмная тема'}
-          style={{ width:30,height:30,borderRadius:8,border:`1px solid ${T.border}`,background:T.bgInput,color:T.textMuted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>
-          <div style={{ width:14,height:14 }}>{theme==='dark'?sunIcon:moonIcon}</div>
-        </button>
+        <div className="anim-logo" style={{ fontSize:22, fontWeight:800 }}>Together</div>
+        <div style={{ display:'flex', gap:6 }}>
+          {/* Колокол уведомлений */}
+          <div style={{ position:'relative' }}>
+            <button onClick={onOpenNotifications} title="Уведомления"
+              style={{ width:30,height:30,borderRadius:8,border:`1px solid ${T.border}`,background:T.bgInput,color:T.textMuted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>
+              <div style={{ width:14,height:14 }}>{bellIcon}</div>
+            </button>
+            {unreadNotifCount > 0 && (
+              <div style={{ position:'absolute', top:-4, right:-4 }}>
+                <Badge count={unreadNotifCount}/>
+              </div>
+            )}
+          </div>
+          <button onClick={onToggleTheme} title={theme==='dark'?'Светлая тема':'Тёмная тема'}
+            style={{ width:30,height:30,borderRadius:8,border:`1px solid ${T.border}`,background:T.bgInput,color:T.textMuted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>
+            <div style={{ width:14,height:14 }}>{theme==='dark'?sunIcon:moonIcon}</div>
+          </button>
+        </div>
       </div>
 
       <div style={{ display:'flex', flexDirection:'column', gap:4, flex:1 }}>
-        {items.map(item => {
+        {navItems.map(item => {
           const on = page === item.id;
           return (
             <button key={item.id} onClick={()=>onNav(item.id)}
-              style={{ display:'flex', alignItems:'center', gap:12, padding:'11px 12px', borderRadius:12, border:'none', background:on?T.accentBg:'transparent', color:on?T.accent:T.textSub, cursor:'pointer', fontFamily:"'Plus Jakarta Sans',sans-serif", fontSize:14, fontWeight:700, transition:'all 0.15s', textAlign:'left' }}>
-              <div style={{ width:20, height:20 }}>{item.icon}</div>
-              {item.label}
+              style={{ display:'flex', alignItems:'center', gap:12, padding:'11px 12px', borderRadius:12, border:'none', borderLeft:on?`3px solid ${T.accent}`:'3px solid transparent', background:on?T.accentBg:'transparent', color:on?T.accent:T.textSub, cursor:'pointer', fontFamily:"'Plus Jakarta Sans',sans-serif", fontSize:14, fontWeight:700, transition:'all 0.2s cubic-bezier(0.34,1.56,0.64,1)', textAlign:'left', transform:on?'translateX(3px)':'translateX(0)' }}>
+              <div style={{ width:20, height:20, flexShrink:0 }}>{item.icon}</div>
+              <span style={{ flex:1 }}>{item.label}</span>
+              {item.badge > 0 && <Badge count={item.badge}/>}
             </button>
           );
         })}
 
+        {(user.role === 'admin' || user.role === 'moderation_staff') && (
+          <button onClick={()=>onNav('moderation')}
+            style={{ display:'flex', alignItems:'center', gap:12, padding:'11px 12px', borderRadius:12, border:'none', borderLeft:page==='moderation'?`3px solid #5B8FD4`:'3px solid transparent', background:page==='moderation'?'rgba(91,143,212,0.12)':'transparent', color:page==='moderation'?'#5B8FD4':T.textSub, cursor:'pointer', fontFamily:"'Plus Jakarta Sans',sans-serif", fontSize:14, fontWeight:700, transition:'all 0.2s', textAlign:'left', transform:page==='moderation'?'translateX(3px)':'translateX(0)' }}>
+            <div style={{ width:20, height:20 }}>🛡️</div>
+            <span>Модерация</span>
+          </button>
+        )}
+
         <div style={{ marginTop:12, padding:'0 2px' }}>
           <button onClick={()=>onNav('create')}
-            style={{ display:'flex', alignItems:'center', gap:10, padding:'13px 14px', borderRadius:14, border:'none', background:T.accent, color:'#fff', cursor:'pointer', fontFamily:"'Plus Jakarta Sans',sans-serif", fontSize:14, fontWeight:800, width:'100%', boxShadow:`0 4px 16px ${T.accent}44` }}>
+            style={{ display:'flex', alignItems:'center', gap:10, padding:'13px 14px', borderRadius:14, border:'none', background:T.accent, color:'#fff', cursor:'pointer', fontFamily:"'Plus Jakarta Sans',sans-serif", fontSize:14, fontWeight:800, width:'100%', boxShadow:`0 4px 20px ${T.accent}55`, animation:'glow-ring 2.5s ease-in-out infinite', transition:'transform 0.15s, box-shadow 0.15s' }}
+            onMouseEnter={e=>{e.currentTarget.style.transform='scale(1.03)';}} onMouseLeave={e=>{e.currentTarget.style.transform='';}}>
             <div style={{ width:20, height:20 }}>{I.plus}</div>
             Создать событие
           </button>
@@ -341,7 +500,7 @@ function Sidebar({ page, onNav, user, onLogout, theme, onToggleTheme }) {
 
       <div style={{ borderTop:`1px solid ${T.border}`, paddingTop:16, display:'flex', alignItems:'center', gap:10 }}>
         <div style={{ cursor:'pointer' }} onClick={()=>onNav('profile')}>
-          <Av name={user.name} size={36}/>
+          <Av name={user.name} size={36} url={avatarUrl}/>
         </div>
         <div style={{ flex:1, minWidth:0, cursor:'pointer' }} onClick={()=>onNav('profile')}>
           <div style={{ fontSize:13, fontWeight:700, color:T.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{user.name}</div>
@@ -353,6 +512,243 @@ function Sidebar({ page, onNav, user, onLogout, theme, onToggleTheme }) {
         </button>
       </div>
     </div>
+  );
+}
+
+// ── NOTIFICATION PANEL ────────────────────────────────────────────────────────
+function NotificationPanel({ notifications, currentUser, onClose, onMarkAllRead, onNavigatePost }) {
+  const [broadcastMsg, setBroadcastMsg] = React.useState('');
+  const [sending, setSending] = React.useState(false);
+
+  const typeIcon = t => ({ friend_request:'🤝', friend_accepted:'✅', participant_approved:'🎉', admin_broadcast:'📢' }[t] || '🔔');
+  const timeAgo = d => {
+    const s = Math.floor((Date.now() - new Date(d)) / 1000);
+    if (s < 60) return 'только что';
+    if (s < 3600) return `${Math.floor(s/60)} мин. назад`;
+    if (s < 86400) return `${Math.floor(s/3600)} ч. назад`;
+    return `${Math.floor(s/86400)} дн. назад`;
+  };
+
+  const sendBroadcast = async () => {
+    if (!broadcastMsg.trim()) return;
+    setSending(true);
+    try { await api.broadcast(broadcastMsg); setBroadcastMsg(''); toast('Рассылка отправлена!'); }
+    catch(e) { toast(e.message,'error'); }
+    setSending(false);
+  };
+
+  return (
+    <>
+      {/* Затемнённый фон */}
+      <div onClick={onClose} style={{ position:'fixed', inset:0, zIndex:1000 }}/>
+      <div style={{ position:'fixed', top:64, left:14, width:340, maxHeight:'70vh', background:T.bgCard, border:`1.5px solid ${T.border}`, borderRadius:18, boxShadow:T.shadow, zIndex:1001, display:'flex', flexDirection:'column', overflow:'hidden', animation:'pop 0.2s ease' }}>
+        {/* Заголовок */}
+        <div style={{ padding:'16px 18px 12px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+          <div style={{ fontSize:16, fontWeight:800, color:T.text }}>Уведомления</div>
+          {notifications.some(n => !n.isRead) && (
+            <button onClick={onMarkAllRead} style={{ fontSize:12, color:T.accent, fontWeight:700, background:'none', border:'none', cursor:'pointer', fontFamily:"'Plus Jakarta Sans',sans-serif" }}>
+              Прочитать все
+            </button>
+          )}
+        </div>
+
+        {/* Список */}
+        <div style={{ flex:1, overflowY:'auto' }}>
+          {notifications.length === 0 && (
+            <div style={{ textAlign:'center', padding:32, color:T.textMuted, fontSize:14 }}>Уведомлений пока нет</div>
+          )}
+          {notifications.map(n => (
+            <div key={n.id} style={{ display:'flex', gap:12, padding:'12px 16px', borderBottom:`1px solid ${T.border}`, background:n.isRead ? 'transparent' : T.accentBg, transition:'background 0.2s' }}>
+              <div style={{ fontSize:22, flexShrink:0 }}>{typeIcon(n.type)}</div>
+              <div style={{ flex:1, minWidth:0 }}>
+                <div style={{ fontSize:13, fontWeight:600, color:T.text, lineHeight:1.4 }}>{n.message}</div>
+                <div style={{ fontSize:11, color:T.textMuted, marginTop:4 }}>{timeAgo(n.createdAt)}</div>
+              </div>
+              {!n.isRead && <div style={{ width:7, height:7, borderRadius:99, background:T.accent, flexShrink:0, marginTop:5 }}/>}
+            </div>
+          ))}
+        </div>
+
+        {/* Форма рассылки — только для admin */}
+        {currentUser?.role === 'admin' && (
+          <div style={{ padding:'12px 16px', borderTop:`1px solid ${T.border}`, flexShrink:0 }}>
+            <div style={{ fontSize:11, fontWeight:700, color:T.textMuted, textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:8 }}>Рассылка всем пользователям</div>
+            <div style={{ display:'flex', gap:8 }}>
+              <input value={broadcastMsg} onChange={e=>setBroadcastMsg(e.target.value)}
+                placeholder="Текст уведомления…"
+                style={{ flex:1, background:T.bgInput, border:`1.5px solid ${T.border}`, borderRadius:10, padding:'8px 12px', fontSize:13, fontFamily:"'Plus Jakarta Sans',sans-serif", color:T.text, outline:'none' }}/>
+              <button onClick={sendBroadcast} disabled={sending||!broadcastMsg.trim()}
+                style={{ padding:'8px 14px', borderRadius:10, border:'none', background:T.accent, color:'#fff', fontSize:13, fontWeight:700, cursor:'pointer', opacity:sending||!broadcastMsg.trim()?0.5:1, fontFamily:"'Plus Jakarta Sans',sans-serif" }}>
+                {sending ? '…' : '📢'}
+              </button>
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+// ── FRIENDS MODAL ─────────────────────────────────────────────────────────────
+function FriendsModal({ targetUserId, currentUser, onClose, onOpenProfile, onOpenDM }) {
+  const [friends, setFriends] = React.useState([]);
+  const [requests, setRequests] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [statuses, setStatuses] = React.useState({}); // friendId -> status
+
+  const isOwnProfile = targetUserId === currentUser.id;
+
+  React.useEffect(() => {
+    setLoading(true);
+    const promises = [api.getUserFriends(targetUserId)];
+    if (isOwnProfile) promises.push(api.getFriendRequests());
+    Promise.all(promises).then(([fr, reqs]) => {
+      setFriends(fr);
+      if (reqs) setRequests(reqs);
+      setLoading(false);
+    }).catch(() => setLoading(false));
+  }, [targetUserId]);
+
+  // Загружаем статус дружбы для каждого друга (нужно если смотрим чужой профиль)
+  React.useEffect(() => {
+    if (isOwnProfile || friends.length === 0) return;
+    Promise.all(friends.map(f => api.getFriendStatus(f.id).then(s => [f.id, s]))).then(pairs => {
+      setStatuses(Object.fromEntries(pairs));
+    }).catch(() => {});
+  }, [friends, isOwnProfile]);
+
+  const acceptRequest = async (req) => {
+    try {
+      await api.acceptFriend(req.id);
+      setRequests(r => r.filter(x => x.id !== req.id));
+      setFriends(f => [...f, { id: req.from.id, name: req.from.name, username: req.from.username, avatarUrl: req.from.avatarUrl, friendshipId: req.id }]);
+      toast(`${req.from.name} теперь твой друг! 🤝`);
+    } catch(e) { toast(e.message,'error'); }
+  };
+
+  const removeFriend = async (friendshipId, friendName) => {
+    try {
+      await api.removeFriend(friendshipId);
+      setFriends(f => f.filter(x => x.friendshipId !== friendshipId));
+      toast(`${friendName} удалён из друзей`);
+    } catch(e) { toast(e.message,'error'); }
+  };
+
+  const addFriend = async (friendId) => {
+    try {
+      const res = await api.sendFriendRequest(friendId);
+      setStatuses(s => ({ ...s, [friendId]: { status: 'pending', isSender: true, friendshipId: res.friendshipId } }));
+      toast('Запрос отправлен!');
+    } catch(e) { toast(e.message,'error'); }
+  };
+
+  return (
+    <>
+      <div onClick={onClose} style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.5)', zIndex:2000 }}/>
+      <div style={{ position:'fixed', top:'50%', left:'50%', transform:'translate(-50%,-50%)', width:420, maxHeight:'80vh', background:T.bgCard, border:`1.5px solid ${T.border}`, borderRadius:20, boxShadow:T.shadow, zIndex:2001, display:'flex', flexDirection:'column', animation:'pop 0.2s ease' }}>
+        {/* Заголовок */}
+        <div style={{ padding:'18px 20px 14px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', justifyContent:'space-between', flexShrink:0 }}>
+          <div style={{ fontSize:18, fontWeight:800, color:T.text }}>
+            {isOwnProfile ? 'Мои друзья' : 'Друзья'}
+          </div>
+          <button onClick={onClose} style={{ width:30,height:30,borderRadius:8,border:`1px solid ${T.border}`,background:T.bgInput,color:T.textMuted,cursor:'pointer',display:'flex',alignItems:'center',justifyContent:'center' }}>
+            <div style={{ width:14,height:14 }}>{I.close}</div>
+          </button>
+        </div>
+
+        <div style={{ flex:1, overflowY:'auto', padding:'8px 12px 16px' }}>
+          {loading && <div style={{ textAlign:'center', padding:32 }}><Spinner/></div>}
+
+          {/* Входящие запросы (только для своего профиля) */}
+          {isOwnProfile && requests.length > 0 && (
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:11, fontWeight:700, color:T.textMuted, textTransform:'uppercase', letterSpacing:'0.07em', padding:'8px 4px 6px' }}>
+                Запросы в друзья ({requests.length})
+              </div>
+              {requests.map(req => (
+                <div key={req.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 10px', borderRadius:14, background:T.accentBg, border:`1px solid ${T.accent}33`, marginBottom:6 }}>
+                  <div style={{ cursor:'pointer' }} onClick={()=>{ onClose(); onOpenProfile(req.from.id); }}>
+                    <Av name={req.from.name} size={40} url={req.from.avatarUrl} userId={req.from.id}/>
+                  </div>
+                  <div style={{ flex:1, minWidth:0 }}>
+                    <div style={{ fontSize:14, fontWeight:700, color:T.text }}>{req.from.name}</div>
+                    <div style={{ fontSize:12, color:T.textMuted }}>@{req.from.username}</div>
+                  </div>
+                  <div style={{ display:'flex', gap:6 }}>
+                    <button onClick={()=>acceptRequest(req)}
+                      style={{ padding:'6px 12px', borderRadius:8, border:'none', background:T.accent, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:"'Plus Jakarta Sans',sans-serif" }}>
+                      Принять
+                    </button>
+                    <button onClick={()=>{ api.removeFriend(req.id); setRequests(r=>r.filter(x=>x.id!==req.id)); toast('Запрос отклонён'); }}
+                      style={{ padding:'6px 10px', borderRadius:8, border:`1px solid ${T.border}`, background:'transparent', color:T.textMuted, fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:"'Plus Jakarta Sans',sans-serif" }}>
+                      ✕
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Список друзей */}
+          {!loading && friends.length === 0 && requests.length === 0 && (
+            <div style={{ textAlign:'center', padding:32, color:T.textMuted, fontSize:14 }}>
+              {isOwnProfile ? 'У вас пока нет друзей. Зайди в профиль кого-нибудь и добавь!' : 'У этого пользователя пока нет друзей'}
+            </div>
+          )}
+          {!loading && friends.length > 0 && (
+            <div style={{ marginTop: isOwnProfile && requests.length > 0 ? 0 : 4 }}>
+              {isOwnProfile && requests.length > 0 && <div style={{ fontSize:11, fontWeight:700, color:T.textMuted, textTransform:'uppercase', letterSpacing:'0.07em', padding:'4px 4px 8px' }}>Друзья ({friends.length})</div>}
+              {friends.map(f => {
+                const st = statuses[f.id];
+                return (
+                  <div key={f.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 10px', borderRadius:14, border:`1.5px solid ${T.border}`, marginBottom:6, background:T.bgCard }}>
+                    <div style={{ cursor:'pointer' }} onClick={()=>{ onClose(); onOpenProfile(f.id); }}>
+                      <Av name={f.name} size={42} url={f.avatarUrl} userId={f.id}/>
+                    </div>
+                    <div style={{ flex:1, minWidth:0 }}>
+                      <div style={{ fontSize:14, fontWeight:700, color:T.text, cursor:'pointer' }} onClick={()=>{ onClose(); onOpenProfile(f.id); }}>{f.name}</div>
+                      <div style={{ fontSize:12, color:T.textMuted }}>@{f.username}</div>
+                    </div>
+                    <div style={{ display:'flex', gap:6, flexShrink:0 }}>
+                      {isOwnProfile ? (
+                        <>
+                          <button onClick={()=>{ onClose(); onOpenDM(f); }}
+                            style={{ padding:'6px 12px', borderRadius:8, border:'none', background:T.accent, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:"'Plus Jakarta Sans',sans-serif" }}>
+                            💬
+                          </button>
+                          <button onClick={()=>removeFriend(f.friendshipId, f.name)}
+                            style={{ padding:'6px 10px', borderRadius:8, border:`1px solid ${T.border}`, background:'transparent', color:T.danger, fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:"'Plus Jakarta Sans',sans-serif" }}>
+                            ✕
+                          </button>
+                        </>
+                      ) : (
+                        <>
+                          {!st || st.status === 'none' ? (
+                            <button onClick={()=>addFriend(f.id)}
+                              style={{ padding:'6px 12px', borderRadius:8, border:`1px solid ${T.border}`, background:T.bgInput, color:T.text, fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:"'Plus Jakarta Sans',sans-serif" }}>
+                              + Добавить
+                            </button>
+                          ) : st.status === 'pending' && st.isSender ? (
+                            <span style={{ fontSize:12, color:T.textMuted, fontWeight:600 }}>Запрос отправлен</span>
+                          ) : st.status === 'pending' && !st.isSender ? (
+                            <button onClick={()=>acceptRequest({ id: st.friendshipId, from: f })}
+                              style={{ padding:'6px 12px', borderRadius:8, border:'none', background:T.accent, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer', fontFamily:"'Plus Jakarta Sans',sans-serif" }}>
+                              Принять
+                            </button>
+                          ) : (
+                            <span style={{ fontSize:12, color:T.success, fontWeight:700 }}>✓ Друзья</span>
+                          )}
+                        </>
+                      )}
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+    </>
   );
 }
 
@@ -385,7 +781,7 @@ function FeedPage({ currentUser, connection, onOpenPost }) {
   const FilterPill = ({ label, field, value }) => {
     const on = filters[field] === value;
     return <button onClick={()=>setFilters(f=>({...f,[field]:on?'':value}))}
-      style={{ padding:'6px 14px', borderRadius:99, border:`1.5px solid ${on?T.accent:T.border}`, background:on?T.accentBg:T.bgInput, color:on?T.accent:T.textSub, fontSize:12, fontWeight:700, cursor:'pointer', transition:'all 0.15s', fontFamily:"'Plus Jakarta Sans',sans-serif", flexShrink:0 }}>{label}</button>;
+      style={{ padding:'6px 14px', borderRadius:99, border:`1.5px solid ${on?T.accent:T.border}`, background:on?T.accentBg:T.bgInput, color:on?T.accent:T.textSub, fontSize:12, fontWeight:700, cursor:'pointer', transition:'all 0.2s cubic-bezier(0.34,1.56,0.64,1)', fontFamily:"'Plus Jakarta Sans',sans-serif", flexShrink:0, transform:on?'scale(1.05)':'scale(1)' }}>{label}</button>;
   };
 
   return (
@@ -394,7 +790,7 @@ function FeedPage({ currentUser, connection, onOpenPost }) {
       <div style={{ padding:'24px 32px 0', flexShrink:0 }}>
         <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom:20 }}>
           <div style={{ fontSize:26, fontWeight:800, color:T.text, letterSpacing:'-0.02em' }}>Лента событий</div>
-          <div style={{ display:'flex', alignItems:'center', gap:8, background:T.bgInput, border:`1.5px solid ${T.border}`, borderRadius:12, padding:'9px 14px', width:280 }}>
+          <div className="search-glow" style={{ display:'flex', alignItems:'center', gap:8, background:T.bgInput, border:`1.5px solid ${T.border}`, borderRadius:12, padding:'9px 14px', width:280, transition:'border-color 0.2s, box-shadow 0.2s' }}>
             <div style={{ width:16, height:16, color:T.textMuted, flexShrink:0 }}>{I.search}</div>
             <input value={query} onChange={e=>setQuery(e.target.value)} placeholder="Поиск событий…"
               style={{ flex:1, background:'none', border:'none', outline:'none', fontSize:14, color:T.text, fontFamily:"'Plus Jakarta Sans',sans-serif" }}/>
@@ -429,7 +825,7 @@ function FeedPage({ currentUser, connection, onOpenPost }) {
           </div>
         ) : (
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill,minmax(320px,1fr))', gap:16 }}>
-            {filtered.map(p => <EventCard key={p.id} post={p} currentUser={currentUser} onClick={()=>onOpenPost(p.id)}/>)}
+            {filtered.map((p,i) => <EventCard key={p.id} post={p} currentUser={currentUser} index={i} onClick={()=>onOpenPost(p.id)}/>)}
           </div>
         )}
       </div>
@@ -437,13 +833,11 @@ function FeedPage({ currentUser, connection, onOpenPost }) {
   );
 }
 
-function EventCard({ post: p, onClick }) {
-  const [hov, setHov] = React.useState(false);
+function EventCard({ post: p, onClick, index=0 }) {
   const fillPct = Math.round((p.filledSpots / p.totalSpots) * 100);
   return (
     <Card onClick={onClick}
-      style={{ padding:20, cursor:'pointer', transform:hov?'translateY(-2px)':'translateY(0)', transition:'transform 0.15s, box-shadow 0.15s', boxShadow:hov?'0 12px 40px rgba(0,0,0,0.5)':T.shadow, borderColor:hov?T.accent:T.border }}
-      onMouseEnter={()=>setHov(true)} onMouseLeave={()=>setHov(false)}>
+      style={{ padding:20, cursor:'pointer', animation:'card-rise 0.5s ease both', animationDelay:index*0.07+'s', position:'relative', overflow:'hidden' }}>
       <div style={{ display:'flex', gap:14, alignItems:'flex-start' }}>
         <div style={{ width:48, height:48, borderRadius:14, background:T.accentBg, display:'flex', alignItems:'center', justifyContent:'center', color:T.accent, flexShrink:0 }}>
           <div style={{ width:26, height:26 }}>{activityIcons[p.activity]||I.mountain}</div>
@@ -478,7 +872,7 @@ function EventCard({ post: p, onClick }) {
           </div>
         </div>
         <div style={{ display:'flex', alignItems:'center', gap:6, flexShrink:0 }}>
-          <Av name={p.author?.name} size={24}/>
+          <Av name={p.author?.name} size={24} url={p.author?.avatarUrl} userId={p.author?.id}/>
           <span style={{ fontSize:12, color:T.textSub, fontWeight:600 }}>{p.author?.name}</span>
         </div>
       </div>
@@ -487,12 +881,14 @@ function EventCard({ post: p, onClick }) {
 }
 
 // ── EVENT DETAIL ──────────────────────────────────────────────────────────────
-function EventDetailPanel({ postId, currentUser, connection, onClose, onNavigateProfile }) {
+function EventDetailPanel({ postId, currentUser, connection, onClose, onNavigateProfile, onGoVerify }) {
   const [post, setPost] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [joining, setJoining] = React.useState(false);
   const [messages, setMessages] = React.useState([]);
   const [msgInput, setMsgInput] = React.useState('');
+  const [showAttendance, setShowAttendance] = React.useState(false);
+  const [attendanceSubmitted, setAttendanceSubmitted] = React.useState(false);
   const messagesEndRef = React.useRef(null);
 
   const load = async () => {
@@ -504,6 +900,12 @@ function EventDetailPanel({ postId, currentUser, connection, onClose, onNavigate
       const isApproved = p.participants.some(pt => pt.userId === currentUser.id && pt.status === 'approved');
       if (isAuthor || isApproved) {
         try { setMessages(await api.getMessages(postId)); } catch {}
+        if (p.status === 'past' || p.status === 'closed') {
+          try {
+            const att = await api.getAttendance(postId);
+            setAttendanceSubmitted(att.alreadySubmitted);
+          } catch {}
+        }
       }
     } catch {}
     setLoading(false);
@@ -553,9 +955,17 @@ function EventDetailPanel({ postId, currentUser, connection, onClose, onNavigate
     catch(e) { toast(e.message,'error'); }
     setJoining(false);
   };
-  const handleApprove = async uid => {
-    try { await api.approveParticipant(postId, uid); toast('Участник принят ✓'); load(); }
-    catch(e) { toast(e.message,'error'); }
+  const handleApprove = async (uid, userName) => {
+    try {
+      const ghost = await api.getGhostStats(uid).catch(() => ({ ghostPercent: 0 }));
+      if (ghost.ghostPercent > 0) {
+        const ok = confirm(`Вы уверены, что хотите принять ${userName}?\n\n💨 Уровень воздухана: ${ghost.ghostPercent}%\n(не явился на ${ghost.ghostEvents} из ${ghost.totalConfirmedEvents} событий)`);
+        if (!ok) return;
+      }
+      await api.approveParticipant(postId, uid);
+      toast('Участник принят ✓');
+      load();
+    } catch(e) { toast(e.message,'error'); }
   };
   const handleReject = async uid => {
     try { await api.rejectParticipant(postId, uid); toast('Заявка отклонена'); load(); }
@@ -586,7 +996,7 @@ function EventDetailPanel({ postId, currentUser, connection, onClose, onNavigate
   const fillPct = Math.round((post.filledSpots / post.totalSpots) * 100);
 
   return (
-    <div style={{ width:720, borderLeft:`1px solid ${T.border}`, display:'flex', flexDirection:'column', background:T.bg, height:'100vh', overflow:'hidden', animation:'panel-in 0.3s ease' }}>
+    <div style={{ width:720, borderLeft:`1px solid ${T.border}`, display:'flex', flexDirection:'column', background:T.bg, height:'100vh', overflow:'hidden', animation:'panel-in 0.4s cubic-bezier(0.22,1,0.36,1)' }}>
       {/* Header */}
       <div style={{ padding:'20px 24px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:14, flexShrink:0 }}>
         <div style={{ width:48, height:48, borderRadius:14, background:T.accentBg, display:'flex', alignItems:'center', justifyContent:'center', color:T.accent, flexShrink:0 }}>
@@ -612,6 +1022,7 @@ function EventDetailPanel({ postId, currentUser, connection, onClose, onNavigate
             <Tag bg={T.bgInput} color={T.textSub}>{fmt(post.dateFrom)} — {fmt(post.dateTo)}</Tag>
             <Tag bg={T.bgInput} color={T.textSub}>{transportLabels[post.transport]}</Tag>
             {post.budget && <Tag bg={T.goldBg} color={T.gold}>{post.budget}</Tag>}
+            {post.requiresSafety && <Tag bg="rgba(91,143,212,0.15)" color="#5B8FD4">🛡️ Только верифицированные</Tag>}
           </div>
 
           {/* Spots bar */}
@@ -637,7 +1048,7 @@ function EventDetailPanel({ postId, currentUser, connection, onClose, onNavigate
           <div style={{ marginBottom:16 }}>
             <SectionLabel>Организатор</SectionLabel>
             <div style={{ display:'flex', alignItems:'center', gap:10, cursor:'pointer' }} onClick={()=>onNavigateProfile(post.author.id)}>
-              <Av name={post.author.name} size={38}/>
+              <Av name={post.author.name} size={38} url={post.author.avatarUrl} userId={post.author.id}/>
               <div>
                 <div style={{ fontSize:14, fontWeight:700, color:T.text }}>{post.author.name}</div>
                 <div style={{ fontSize:12, color:T.textMuted }}>@{post.author.username}</div>
@@ -652,9 +1063,12 @@ function EventDetailPanel({ postId, currentUser, connection, onClose, onNavigate
               <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
                 {post.participants.map(pt => (
                   <div key={pt.userId} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background:T.bgInput, borderRadius:12 }}>
-                    <Av name={pt.user.name} size={32}/>
+                    <Av name={pt.user.name} size={32} url={pt.user.avatarUrl} userId={pt.userId}/>
                     <div style={{ flex:1 }}>
-                      <div style={{ fontSize:13, fontWeight:700, color:T.text, cursor:'pointer' }} onClick={()=>onNavigateProfile(pt.userId)}>{pt.user.name}</div>
+                      <div style={{ display:'flex', alignItems:'center', gap:5 }}>
+                        <div style={{ fontSize:13, fontWeight:700, color:T.text, cursor:'pointer' }} onClick={()=>onNavigateProfile(pt.userId)}>{pt.user.name}</div>
+                        {pt.user.isVerified && <VerifiedBadge/>}
+                      </div>
                       <div style={{ fontSize:11, color:T.textMuted }}>@{pt.user.username}</div>
                     </div>
                     <Tag color={pt.status==='approved'?T.success:pt.status==='rejected'?T.danger:T.textSub} bg={pt.status==='approved'?T.successBg:pt.status==='rejected'?T.dangerBg:T.bgInput}>
@@ -662,7 +1076,7 @@ function EventDetailPanel({ postId, currentUser, connection, onClose, onNavigate
                     </Tag>
                     {isAuthor && pt.status==='pending' && (
                       <div style={{ display:'flex', gap:6 }}>
-                        <Btn size="sm" onClick={()=>handleApprove(pt.userId)}>✓</Btn>
+                        <Btn size="sm" onClick={()=>handleApprove(pt.userId, pt.user.name)}>✓</Btn>
                         <Btn size="sm" variant="danger" onClick={()=>handleReject(pt.userId)}>✕</Btn>
                       </div>
                     )}
@@ -675,7 +1089,13 @@ function EventDetailPanel({ postId, currentUser, connection, onClose, onNavigate
           {/* Actions */}
           <div style={{ display:'flex', gap:8, flexWrap:'wrap' }}>
             {!isAuthor && post.status==='active' && !myParticipant && (
-              <Btn onClick={handleJoin} disabled={joining}>{joining?<Spinner/>:'Подать заявку'}</Btn>
+              post.requiresSafety && !currentUser.isVerified
+                ? <button onClick={onGoVerify} style={{ padding:'10px 16px', borderRadius:12, background:'rgba(91,143,212,0.12)', border:'1px solid rgba(91,143,212,0.3)', fontSize:13, color:'#5B8FD4', fontWeight:700, cursor:'pointer', display:'flex', alignItems:'center', gap:8, fontFamily:"'Plus Jakarta Sans',sans-serif", transition:'all 0.15s' }}
+                    onMouseEnter={e=>e.currentTarget.style.background='rgba(91,143,212,0.22)'}
+                    onMouseLeave={e=>e.currentTarget.style.background='rgba(91,143,212,0.12)'}>
+                    🛡️ Подтвердите личность для участия →
+                  </button>
+                : <Btn onClick={handleJoin} disabled={joining}>{joining?<Spinner/>:'Подать заявку'}</Btn>
             )}
             {myParticipant && (
               <Tag color={myParticipant.status==='approved'?T.success:T.textSub} bg={myParticipant.status==='approved'?T.successBg:T.bgInput}>
@@ -683,8 +1103,22 @@ function EventDetailPanel({ postId, currentUser, connection, onClose, onNavigate
               </Tag>
             )}
             {isAuthor && <Btn variant="danger" size="sm" onClick={handleDelete}>Удалить</Btn>}
+            {canChat && (post.status==='past'||post.status==='closed') && (
+              attendanceSubmitted
+                ? <Tag bg={T.successBg} color={T.success}>✓ Посещаемость отмечена</Tag>
+                : <Btn size="sm" onClick={()=>setShowAttendance(true)}>✅ Отметить участников</Btn>
+            )}
           </div>
         </div>
+
+        {showAttendance && (
+          <AttendanceModal
+            post={post}
+            currentUser={currentUser}
+            onClose={()=>setShowAttendance(false)}
+            onDone={()=>{ setShowAttendance(false); setAttendanceSubmitted(true); }}
+          />
+        )}
 
         {/* Right — chat */}
         <div style={{ borderLeft:`1px solid ${T.border}`, display:'flex', flexDirection:'column', minHeight:0 }}>
@@ -704,10 +1138,10 @@ function EventDetailPanel({ postId, currentUser, connection, onClose, onNavigate
                 const showName = !mine && (!prev || prev.author.id !== m.author.id);
                 return (
                   <div key={m.id} style={{ display:'flex', flexDirection:mine?'row-reverse':'row', alignItems:'flex-end', gap:6, animation:mine?'msg-in-right 0.25s ease both':'msg-in-left 0.25s ease both' }}>
-                    {!mine && <Av name={m.author.name} size={26}/>}
+                    {!mine && <Av name={m.author.name} size={26} url={m.author.avatarUrl} userId={m.author.id}/>}
                     <div style={{ maxWidth:'75%', display:'flex', flexDirection:'column', alignItems:mine?'flex-end':'flex-start', gap:2 }}>
-                      {showName && <span style={{ fontSize:11, color:T.textMuted, fontWeight:600, marginLeft:4 }}>{m.author.name}</span>}
-                      <div style={{ background:mine?T.bubbleMe:T.bubbleOther, color:mine?'#fff':T.text, borderRadius:mine?'14px 14px 4px 14px':'14px 14px 14px 4px', padding:'9px 13px', fontSize:13, lineHeight:1.5 }}>
+                      {showName && <span style={{ fontSize:11, color:T.textMuted, fontWeight:600, marginLeft:4, display:'flex', alignItems:'center', gap:4 }}>{m.author.name}{m.author.isVerified && <VerifiedBadge/>}</span>}
+                      <div style={{ background:mine?T.bubbleMe:T.bubbleOther, color:mine?'#fff':T.text, borderRadius:mine?'16px 16px 5px 16px':'16px 16px 16px 5px', padding:'10px 14px', fontSize:13, lineHeight:1.55, boxShadow:mine?`0 4px 16px ${T.accent}33`:'0 2px 8px rgba(0,0,0,0.15)' }}>
                         {m.text}
                       </div>
                       <span style={{ fontSize:10, color:T.textMuted, padding:'0 4px' }}>{new Date(m.createdAt).toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'})}</span>
@@ -742,7 +1176,7 @@ function EventDetailPanel({ postId, currentUser, connection, onClose, onNavigate
 // ── CREATE ────────────────────────────────────────────────────────────────────
 function CreatePage({ onDone }) {
   const [step, setStep] = React.useState(0);
-  const [form, setForm] = React.useState({ activity:'', location:'', region:'', dateFrom:'', dateTo:'', difficulty:'medium', spots:4, transport:'has-seats', budget:'', description:'' });
+  const [form, setForm] = React.useState({ activity:'', location:'', region:'', dateFrom:'', dateTo:'', difficulty:'medium', spots:4, transport:'has-seats', budget:'', description:'', requiresSafety:false });
   const [errors, setErrors] = React.useState({});
   const [loading, setLoading] = React.useState(false);
   const set = k => v => { setForm(f=>({...f,[k]:v})); setErrors(e=>({...e,[k]:false})); };
@@ -760,7 +1194,7 @@ function CreatePage({ onDone }) {
     if (!validate()) return;
     setLoading(true);
     try {
-      const res = await api.createPost({ ...form, totalSpots: form.spots, dateFrom: new Date(form.dateFrom).toISOString(), dateTo: new Date(form.dateTo).toISOString(), budget: form.budget||null, description: form.description||null });
+      const res = await api.createPost({ ...form, totalSpots: form.spots, dateFrom: new Date(form.dateFrom).toISOString(), dateTo: new Date(form.dateTo).toISOString(), budget: form.budget||null, description: form.description||null, requiresSafety: form.requiresSafety });
       onDone(res.id);
     } catch(e) { alert(e.message); }
     setLoading(false);
@@ -784,7 +1218,7 @@ function CreatePage({ onDone }) {
         </div>
 
         {step===0 && (
-          <div style={{ animation:'sheet-in 0.3s ease' }}>
+          <div style={{ animation:'page-enter 0.4s cubic-bezier(0.22,1,0.36,1) both' }}>
             <div style={{ fontSize:26, fontWeight:800, color:T.text, marginBottom:6 }}>Куда едем?</div>
             <div style={{ fontSize:15, color:T.textMuted, marginBottom:28 }}>Выбери активность и место</div>
 
@@ -818,7 +1252,7 @@ function CreatePage({ onDone }) {
         )}
 
         {step===1 && (
-          <div style={{ animation:'sheet-in 0.3s ease' }}>
+          <div style={{ animation:'page-enter 0.4s cubic-bezier(0.22,1,0.36,1) both' }}>
             <div style={{ fontSize:26, fontWeight:800, color:T.text, marginBottom:6 }}>Когда и кто?</div>
             <div style={{ fontSize:15, color:T.textMuted, marginBottom:28 }}>Даты, уровень и транспорт</div>
 
@@ -869,6 +1303,20 @@ function CreatePage({ onDone }) {
               })}
             </div>
 
+            <div style={{ marginBottom:24 }}>
+              <SectionLabel>Безопасность</SectionLabel>
+              <button onClick={()=>set('requiresSafety')(!form.requiresSafety)}
+                style={{ display:'flex', alignItems:'center', gap:14, width:'100%', padding:'14px 16px', borderRadius:12, border:`1.5px solid ${form.requiresSafety?T.accent:T.border}`, background:form.requiresSafety?T.accentBg:T.bgInput, cursor:'pointer', textAlign:'left', fontFamily:"'Plus Jakarta Sans',sans-serif", transition:'all 0.2s' }}>
+                <div style={{ width:22, height:22, borderRadius:6, border:`2px solid ${form.requiresSafety?T.accent:T.textMuted}`, background:form.requiresSafety?T.accent:'transparent', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, transition:'all 0.15s' }}>
+                  {form.requiresSafety && <div style={{ width:12, height:12, color:'#fff' }}>{I.check}</div>}
+                </div>
+                <div>
+                  <div style={{ fontSize:13, fontWeight:700, color:form.requiresSafety?T.accent:T.text }}>🛡️ Только верифицированные участники</div>
+                  <div style={{ fontSize:12, color:T.textMuted, marginTop:2 }}>Заявку смогут подать только пользователи, подтвердившие личность</div>
+                </div>
+              </button>
+            </div>
+
             <div style={{ display:'flex', gap:10 }}>
               <Btn variant="secondary" onClick={()=>setStep(0)}>← Назад</Btn>
               <Btn onClick={next} full>Дальше →</Btn>
@@ -877,7 +1325,7 @@ function CreatePage({ onDone }) {
         )}
 
         {step===2 && (
-          <div style={{ animation:'sheet-in 0.3s ease' }}>
+          <div style={{ animation:'page-enter 0.4s cubic-bezier(0.22,1,0.36,1) both' }}>
             <div style={{ fontSize:26, fontWeight:800, color:T.text, marginBottom:6 }}>Детали</div>
             <div style={{ fontSize:15, color:T.textMuted, marginBottom:28 }}>Бюджет и описание — необязательно</div>
 
@@ -919,8 +1367,172 @@ function CreatePage({ onDone }) {
   );
 }
 
+// ── DM (личные чаты) ──────────────────────────────────────────────────────────
+function DMPage({ currentUser, connection, initialFriend, onNavigateProfile, onFriendOpen }) {
+  const [friends, setFriends] = React.useState([]);
+  const [requests, setRequests] = React.useState([]);
+  const [openFriend, setOpenFriend] = React.useState(initialFriend || null);
+  const [messages, setMessages] = React.useState([]);
+  const [input, setInput] = React.useState('');
+  const [loadingMsg, setLoadingMsg] = React.useState(false);
+  const endRef = React.useRef(null);
+  const openFriendRef = React.useRef(null);
+
+  React.useEffect(() => {
+    api.getFriends().then(setFriends).catch(()=>{});
+    api.getFriendRequests().then(setRequests).catch(()=>{});
+  }, []);
+
+  React.useEffect(() => {
+    if (initialFriend) openChat(initialFriend);
+  }, [initialFriend?.id]);
+
+  const openChat = async (friend) => {
+    if (connection && openFriendRef.current)
+      connection.invoke('LeaveDM', currentUser.id, openFriendRef.current.id);
+    setOpenFriend(friend);
+    openFriendRef.current = friend;
+    setLoadingMsg(true);
+    onFriendOpen && onFriendOpen(friend.id);
+    try { setMessages(await api.getDM(friend.id)); } catch(e) { toast(e.message,'error'); }
+    setLoadingMsg(false);
+    if (connection) connection.invoke('JoinDM', currentUser.id, friend.id);
+  };
+
+  React.useEffect(() => { endRef.current?.scrollIntoView(); }, [messages]);
+
+  React.useEffect(() => {
+    if (!connection) return;
+    const onDM = msg => { if (openFriendRef.current) setMessages(m => [...m, msg]); };
+    connection.on('NewDM', onDM);
+    return () => connection.off('NewDM', onDM);
+  }, [connection]);
+
+  const send = async () => {
+    const text = input.trim(); if (!text || !openFriend) return;
+    setInput('');
+    try { await api.sendDM(openFriend.id, text); } catch(e) { toast(e.message,'error'); }
+  };
+
+  const acceptRequest = async (req) => {
+    await api.acceptFriend(req.id);
+    setRequests(r => r.filter(x => x.id !== req.id));
+    setFriends(f => [...f, { id: req.from.id, name: req.from.name, username: req.from.username, avatarUrl: req.from.avatarUrl }]);
+    toast(`${req.from.name} теперь твой друг! 🤝`);
+  };
+
+  return (
+    <div style={{ flex:1, display:'flex', minHeight:0 }}>
+      {/* Левая панель */}
+      <div style={{ width:300, borderRight:`1px solid ${T.border}`, display:'flex', flexDirection:'column', flexShrink:0 }}>
+        <div style={{ padding:'20px 20px 12px', flexShrink:0 }}>
+          <div style={{ fontSize:20, fontWeight:800, color:T.text }}>Друзья</div>
+        </div>
+
+        {/* Входящие запросы */}
+        {requests.length > 0 && (
+          <div style={{ padding:'0 12px 8px' }}>
+            <div style={{ fontSize:11, fontWeight:700, color:T.textMuted, textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:8, padding:'0 4px' }}>
+              Запросы в друзья ({requests.length})
+            </div>
+            {requests.map(req => (
+              <div key={req.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', borderRadius:12, background:T.accentBg, marginBottom:6, border:`1px solid ${T.accent}33` }}>
+                <Av name={req.from.name} size={36} url={req.from.avatarUrl} userId={req.from.id}/>
+                <div style={{ flex:1, minWidth:0 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:T.text, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{req.from.name}</div>
+                  <div style={{ fontSize:11, color:T.textMuted }}>@{req.from.username}</div>
+                </div>
+                <button onClick={()=>acceptRequest(req)}
+                  style={{ padding:'5px 10px', borderRadius:8, border:'none', background:T.accent, color:'#fff', fontSize:12, fontWeight:700, cursor:'pointer' }}>
+                  ✓
+                </button>
+              </div>
+            ))}
+          </div>
+        )}
+
+        {/* Список друзей */}
+        <div style={{ fontSize:11, fontWeight:700, color:T.textMuted, textTransform:'uppercase', letterSpacing:'0.07em', padding:'4px 16px 8px' }}>
+          {friends.length > 0 ? `Друзья (${friends.length})` : ''}
+        </div>
+        <div style={{ flex:1, overflowY:'auto', padding:'0 12px 16px', display:'flex', flexDirection:'column', gap:4 }}>
+          {friends.length === 0 && requests.length === 0 && (
+            <div style={{ textAlign:'center', paddingTop:40, color:T.textMuted, fontSize:14 }}>
+              Пока нет друзей.<br/>Зайди в профиль и добавь!
+            </div>
+          )}
+          {friends.map(f => (
+            <button key={f.id} onClick={()=>openChat(f)}
+              style={{ textAlign:'left', padding:'10px 12px', borderRadius:12, border:`1.5px solid ${openFriend?.id===f.id?T.accent:T.border}`, background:openFriend?.id===f.id?T.accentBg:T.bgCard, cursor:'pointer', fontFamily:"'Plus Jakarta Sans',sans-serif", transition:'all 0.15s' }}>
+              <div style={{ display:'flex', gap:10, alignItems:'center' }}>
+                <Av name={f.name} size={38} url={f.avatarUrl} userId={f.id}/>
+                <div>
+                  <div style={{ fontSize:14, fontWeight:700, color:T.text }}>{f.name}</div>
+                  <div style={{ fontSize:12, color:T.textMuted }}>@{f.username}</div>
+                </div>
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {/* Область чата */}
+      {openFriend ? (
+        <div style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0 }}>
+          <div style={{ padding:'14px 24px', borderBottom:`1px solid ${T.border}`, display:'flex', alignItems:'center', gap:12, flexShrink:0 }}>
+            <div style={{ cursor:'pointer' }} onClick={()=>onNavigateProfile&&onNavigateProfile(openFriend.id)}>
+              <Av name={openFriend.name} size={40} url={openFriend.avatarUrl} userId={openFriend.id}/>
+            </div>
+            <div style={{ cursor:'pointer' }} onClick={()=>onNavigateProfile&&onNavigateProfile(openFriend.id)}>
+              <div style={{ fontSize:16, fontWeight:700, color:T.text }}>{openFriend.name}</div>
+              <div style={{ fontSize:12, color:T.textMuted }}>@{openFriend.username}</div>
+            </div>
+          </div>
+          <div style={{ flex:1, overflowY:'auto', padding:'16px 24px', display:'flex', flexDirection:'column', gap:8, background:'rgba(0,0,0,0.1)' }}>
+            {loadingMsg && <div style={{ textAlign:'center', paddingTop:40 }}><Spinner/></div>}
+            {!loadingMsg && messages.length === 0 && <div style={{ textAlign:'center', color:T.textMuted, fontSize:14, marginTop:40 }}>Напишите первое сообщение!</div>}
+            {messages.map((m, i) => {
+              const mine = m.sender.id === currentUser.id;
+              return (
+                <div key={m.id} style={{ display:'flex', flexDirection:mine?'row-reverse':'row', alignItems:'flex-end', gap:8, animation:mine?'msg-in-right 0.25s ease both':'msg-in-left 0.25s ease both' }}>
+                  {!mine && (
+                    <div style={{ cursor:'pointer' }} onClick={()=>onNavigateProfile&&onNavigateProfile(m.sender.id)}>
+                      <Av name={m.sender.name} size={28} url={m.sender.avatarUrl} userId={m.sender.id}/>
+                    </div>
+                  )}
+                  <div style={{ maxWidth:'60%', display:'flex', flexDirection:'column', alignItems:mine?'flex-end':'flex-start', gap:3 }}>
+                    <div style={{ background:mine?T.bubbleMe:T.bubbleOther, color:mine?'#fff':T.text, borderRadius:mine?'16px 16px 4px 16px':'16px 16px 16px 4px', padding:'10px 14px', fontSize:14, lineHeight:1.5 }}>{m.text}</div>
+                    <span style={{ fontSize:10, color:T.textMuted, padding:'0 4px' }}>{new Date(m.createdAt).toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'})}</span>
+                  </div>
+                </div>
+              );
+            })}
+            <div ref={endRef}/>
+          </div>
+          <div style={{ padding:'12px 24px', borderTop:`1px solid ${T.border}`, display:'flex', gap:10, flexShrink:0 }}>
+            <input value={input} onChange={e=>setInput(e.target.value)}
+              onKeyDown={e=>{ if(e.key==='Enter'&&!e.shiftKey){e.preventDefault();send();} }}
+              placeholder="Сообщение… (Enter — отправить)"
+              style={{ flex:1, background:T.bgInput, border:`1.5px solid ${T.border}`, borderRadius:12, padding:'11px 14px', fontSize:14, fontFamily:"'Plus Jakarta Sans',sans-serif", color:T.text, outline:'none' }}/>
+            <button onClick={send}
+              style={{ width:42, height:42, borderRadius:12, border:'none', background:input.trim()?T.accent:T.bgInput, color:input.trim()?'#fff':T.textMuted, cursor:'pointer', display:'flex', alignItems:'center', justifyContent:'center', transition:'all 0.15s' }}>
+              <div style={{ width:18,height:18 }}>{I.send}</div>
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center', flexDirection:'column', gap:12, color:T.textMuted }}>
+          <div style={{ fontSize:36 }}>👥</div>
+          <div style={{ fontSize:15, fontWeight:600 }}>Выбери друга слева</div>
+          <div style={{ fontSize:13 }}>Писать можно только друзьям</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 // ── CHATS ─────────────────────────────────────────────────────────────────────
-function ChatsPage({ currentUser, connection }) {
+function ChatsPage({ currentUser, connection, onNavigateProfile }) {
   const [posts, setPosts] = React.useState([]);
   const [openPost, setOpenPost] = React.useState(null);
   const [messages, setMessages] = React.useState([]);
@@ -1020,9 +1632,13 @@ function ChatsPage({ currentUser, connection }) {
               const mine = m.author.id === currentUser.id;
               return (
                 <div key={m.id} style={{ display:'flex', flexDirection:mine?'row-reverse':'row', alignItems:'flex-end', gap:8, animation:mine?'msg-in-right 0.25s ease both':'msg-in-left 0.25s ease both' }}>
-                  {!mine && <Av name={m.author.name} size={28}/>}
+                  {!mine && (
+                    <div style={{ cursor:'pointer' }} onClick={()=>onNavigateProfile&&onNavigateProfile(m.author.id)}>
+                      <Av name={m.author.name} size={28} url={m.author.avatarUrl} userId={m.author.id}/>
+                    </div>
+                  )}
                   <div style={{ maxWidth:'60%', display:'flex', flexDirection:'column', alignItems:mine?'flex-end':'flex-start', gap:3 }}>
-                    {!mine && <span style={{ fontSize:11, color:T.textMuted, fontWeight:600, marginLeft:4 }}>{m.author.name}</span>}
+                    {!mine && <span style={{ fontSize:11, color:T.textMuted, fontWeight:600, marginLeft:4, cursor:'pointer', display:'flex', alignItems:'center', gap:4 }} onClick={()=>onNavigateProfile&&onNavigateProfile(m.author.id)}>{m.author.name}{m.author.isVerified && <VerifiedBadge/>}</span>}
                     <div style={{ background:mine?T.bubbleMe:T.bubbleOther, color:mine?'#fff':T.text, borderRadius:mine?'16px 16px 4px 16px':'16px 16px 16px 4px', padding:'10px 14px', fontSize:14, lineHeight:1.5 }}>{m.text}</div>
                     <span style={{ fontSize:10, color:T.textMuted, padding:'0 4px' }}>{new Date(m.createdAt).toLocaleTimeString('ru',{hour:'2-digit',minute:'2-digit'})}</span>
                   </div>
@@ -1088,7 +1704,7 @@ function RatingBar({ star, count, max }) {
   );
 }
 
-function ProfilePage({ userId, currentUser }) {
+function ProfilePage({ userId, currentUser, onOpenDM, onNavigateProfile, autoOpenVerify, onVerifyOpened }) {
   const [user, setUser] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [showReviewForm, setShowReviewForm] = React.useState(false);
@@ -1096,15 +1712,93 @@ function ProfilePage({ userId, currentUser }) {
   const [editing, setEditing] = React.useState(false);
   const [editForm, setEditForm] = React.useState({ name:'', location:'', bio:'' });
   const [saving, setSaving] = React.useState(false);
+  const [avatarUploading, setAvatarUploading] = React.useState(false);
+  const [friendStatus, setFriendStatus] = React.useState(null);
+  const [friendLoading, setFriendLoading] = React.useState(false);
+  const [showFriendsModal, setShowFriendsModal] = React.useState(false);
+  const [verifStatus, setVerifStatus] = React.useState(null);
+  const [showVerifForm, setShowVerifForm] = React.useState(false);
+  const [verifForm, setVerifForm] = React.useState({ fullName:'', passportNumber:'', birthDate:'' });
+  const [verifFiles, setVerifFiles] = React.useState({ passportPhoto:null, selfiePhoto:null });
+  const [verifLoading, setVerifLoading] = React.useState(false);
+  const [rejectReason, setRejectReason] = React.useState('');
 
   React.useEffect(() => {
     setLoading(true);
     api.getUser(userId).then(u=>{ setUser(u); setLoading(false); }).catch(()=>setLoading(false));
   }, [userId]);
 
+  React.useEffect(() => {
+    if (userId !== currentUser.id) {
+      api.getFriendStatus(userId).then(s => setFriendStatus(s)).catch(()=>{});
+    } else {
+      api.getMyVerification().then(v => setVerifStatus(v)).catch(()=>{});
+    }
+  }, [userId]);
+
+  React.useEffect(() => {
+    if (autoOpenVerify && userId === currentUser.id) {
+      setShowVerifForm(true);
+      onVerifyOpened && onVerifyOpened();
+      setTimeout(() => {
+        document.getElementById('verif-section')?.scrollIntoView({ behavior:'smooth', block:'center' });
+      }, 150);
+    }
+  }, [autoOpenVerify]);
+
   const openEdit = () => {
     setEditForm({ name: user.name, location: user.location || '', bio: user.bio || '' });
     setEditing(true);
+  };
+
+  const handleAvatarUpload = async (file) => {
+    if (!file) return;
+    setAvatarUploading(true);
+    try {
+      const url = await api.uploadAvatar(file);
+      setUser(u => ({ ...u, avatarUrl: url }));
+      // обновляем user в localStorage
+      const stored = JSON.parse(localStorage.getItem('user') || '{}');
+      localStorage.setItem('user', JSON.stringify({ ...stored, avatarUrl: url }));
+      toast('Аватар обновлён ✓');
+    } catch(e) { toast(e.message, 'error'); }
+    finally { setAvatarUploading(false); }
+  };
+
+  const handleFriendAction = async () => {
+    setFriendLoading(true);
+    try {
+      if (!friendStatus || friendStatus.status === 'none') {
+        await api.sendFriendRequest(userId);
+        setFriendStatus({ status:'pending', isSender:true });
+        toast('Запрос отправлен!');
+      } else if (friendStatus.status === 'pending' && !friendStatus.isSender) {
+        await api.acceptFriend(friendStatus.friendshipId);
+        setFriendStatus({ ...friendStatus, status:'accepted' });
+        toast('Дружба принята! 🤝');
+      } else if (friendStatus.status === 'accepted') {
+        await api.removeFriend(friendStatus.friendshipId);
+        setFriendStatus({ status:'none' });
+        toast('Удалён из друзей');
+      }
+    } catch(e) { toast(e.message,'error'); }
+    finally { setFriendLoading(false); }
+  };
+
+  const submitVerification = async () => {
+    if (!verifForm.fullName || !verifForm.passportNumber || !verifForm.birthDate)
+      return toast('Заполните все поля', 'error');
+    if (!verifFiles.passportPhoto || !verifFiles.selfiePhoto)
+      return toast('Загрузите оба фото', 'error');
+    setVerifLoading(true);
+    try {
+      await api.submitVerification({ ...verifForm, ...verifFiles });
+      const v = await api.getMyVerification();
+      setVerifStatus(v);
+      setShowVerifForm(false);
+      toast('Заявка отправлена на проверку!');
+    } catch(e) { toast(e.message, 'error'); }
+    finally { setVerifLoading(false); }
   };
 
   const saveProfile = async () => {
@@ -1152,13 +1846,27 @@ function ProfilePage({ userId, currentUser }) {
       <div style={{ maxWidth:900, margin:'0 auto' }}>
 
         {/* Header */}
-        <Card style={{ padding:28, marginBottom:16 }}>
+        <Card style={{ padding:28, marginBottom:16, animation:'bounce-in 0.6s cubic-bezier(0.34,1.56,0.64,1) both' }}>
           <div style={{ display:'flex', gap:24, alignItems:'flex-start' }}>
-            <div style={{ width:80, height:80, borderRadius:99, background:avatarColor(user.name), display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, fontWeight:800, color:'rgba(0,0,0,0.5)', border:`3px solid ${T.accent}`, flexShrink:0 }}>
-              {initials(user.name)}
+            {/* Аватар */}
+            <div style={{ position:'relative', flexShrink:0 }}>
+              {user.avatarUrl
+                ? <img src={user.avatarUrl} alt={user.name} style={{ width:80, height:80, borderRadius:99, objectFit:'cover', border:`3px solid ${T.accent}` }}/>
+                : <div style={{ width:80, height:80, borderRadius:99, background:avatarColor(user.name), display:'flex', alignItems:'center', justifyContent:'center', fontSize:28, fontWeight:800, color:'rgba(0,0,0,0.5)', border:`3px solid ${T.accent}` }}>{initials(user.name)}</div>
+              }
+              {isMe && (
+                <label style={{ position:'absolute', bottom:0, right:0, width:26, height:26, borderRadius:99, background:T.accent, display:'flex', alignItems:'center', justifyContent:'center', cursor:'pointer', fontSize:12, border:`2px solid ${T.bgCard}` }}>
+                  {avatarUploading ? '…' : '📷'}
+                  <input type="file" accept="image/*" style={{ display:'none' }} onChange={e=>handleAvatarUpload(e.target.files[0])} disabled={avatarUploading}/>
+                </label>
+              )}
             </div>
             <div style={{ flex:1, minWidth:0 }}>
-              <div style={{ fontSize:22, fontWeight:800, color:T.text, letterSpacing:'-0.02em' }}>{user.name}</div>
+              <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                <div style={{ fontSize:22, fontWeight:800, color:T.text, letterSpacing:'-0.02em' }}>{user.name}</div>
+                {user.isVerified && <span title="Личность подтверждена" style={{ fontSize:11, fontWeight:800, padding:'3px 9px', borderRadius:20, background:'rgba(91,143,212,0.15)', color:'#5B8FD4' }}>🛡️ Верифицирован</span>}
+                {user.ghostPercent > 20 && <span title={`Воздухан ${user.ghostPercent}%`} style={{ fontSize:11, fontWeight:800, padding:'3px 9px', borderRadius:20, background: user.ghostPercent>50?T.dangerBg:T.goldBg, color: user.ghostPercent>50?T.danger:T.gold }}>💨 Воздух {user.ghostPercent}%</span>}
+              </div>
               <div style={{ fontSize:13, color:T.textMuted, marginTop:2 }}>
                 @{user.username}{user.location ? ` · 📍 ${user.location}` : ''} · С нами с {joinMonth}
               </div>
@@ -1172,10 +1880,31 @@ function ProfilePage({ userId, currentUser }) {
                 </div>
               )}
             </div>
-            {isMe
-              ? <Btn variant="secondary" onClick={openEdit}>✏️ Редактировать</Btn>
-              : <Btn variant="secondary" onClick={()=>setShowReviewForm(true)}>Написать отзыв</Btn>
-            }
+            <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+              {isMe ? (
+                <Btn variant="secondary" onClick={openEdit}>✏️ Редактировать</Btn>
+              ) : (
+                <>
+                  {/* Кнопка дружбы */}
+                  {(!friendStatus || friendStatus.status === 'none') && (
+                    <Btn onClick={handleFriendAction} disabled={friendLoading}>👥 Добавить в друзья</Btn>
+                  )}
+                  {friendStatus?.status === 'pending' && friendStatus.isSender && (
+                    <Btn variant="secondary" disabled>⏳ Запрос отправлен</Btn>
+                  )}
+                  {friendStatus?.status === 'pending' && !friendStatus.isSender && (
+                    <Btn onClick={handleFriendAction} disabled={friendLoading}>✓ Принять запрос</Btn>
+                  )}
+                  {friendStatus?.status === 'accepted' && (
+                    <>
+                      <Btn onClick={()=>onOpenDM(user)}>💬 Написать</Btn>
+                      <Btn variant="ghost" size="sm" onClick={handleFriendAction} disabled={friendLoading}>Удалить из друзей</Btn>
+                    </>
+                  )}
+                  <Btn variant="secondary" size="sm" onClick={()=>setShowReviewForm(true)}>Отзыв</Btn>
+                </>
+              )}
+            </div>
           </div>
         </Card>
 
@@ -1207,20 +1936,95 @@ function ProfilePage({ userId, currentUser }) {
           </Card>
         )}
 
+        {/* Верификация личности (только для себя) */}
+        {isMe && (
+          <Card id="verif-section" style={{ padding:20, marginBottom:16, borderColor: user.isVerified ? '#5B8FD4' : verifStatus?.status==='pending' ? T.gold : T.border }}>
+            <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', marginBottom: showVerifForm ? 18 : 0 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                <div style={{ fontSize:22 }}>🛡️</div>
+                <div>
+                  <div style={{ fontSize:14, fontWeight:700, color:T.text }}>Верификация личности</div>
+                  <div style={{ fontSize:12, color:T.textMuted, marginTop:1 }}>
+                    {user.isVerified ? 'Личность подтверждена — можете участвовать в закрытых событиях'
+                      : verifStatus?.status==='pending' ? 'Заявка на проверке у модераторов'
+                      : verifStatus?.status==='rejected' ? `Отклонено: ${verifStatus.rejectionReason}`
+                      : 'Подтвердите личность для доступа к событиям с требованием безопасности'}
+                  </div>
+                </div>
+              </div>
+              {!user.isVerified && verifStatus?.status !== 'pending' && (
+                <Btn size="sm" variant="secondary" onClick={()=>setShowVerifForm(v=>!v)}>
+                  {showVerifForm ? 'Скрыть' : verifStatus?.status==='rejected' ? 'Подать снова' : 'Подтвердить'}
+                </Btn>
+              )}
+            </div>
+            {showVerifForm && (
+              <div style={{ animation:'sheet-in 0.3s ease' }}>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:12 }}>
+                  <div>
+                    <SectionLabel>ФИО (как в паспорте)</SectionLabel>
+                    <input value={verifForm.fullName} onChange={e=>setVerifForm(f=>({...f,fullName:e.target.value}))}
+                      placeholder="Иванов Иван Иванович"
+                      style={{ width:'100%', boxSizing:'border-box', padding:'10px 14px', borderRadius:10, border:`1.5px solid ${T.border}`, background:T.bgInput, color:T.text, fontFamily:"'Plus Jakarta Sans',sans-serif", fontSize:14, outline:'none' }}/>
+                  </div>
+                  <div>
+                    <SectionLabel>Дата рождения</SectionLabel>
+                    <input type="date" value={verifForm.birthDate} onChange={e=>setVerifForm(f=>({...f,birthDate:e.target.value}))}
+                      style={{ width:'100%', boxSizing:'border-box', padding:'10px 14px', borderRadius:10, border:`1.5px solid ${T.border}`, background:T.bgInput, color:T.text, fontFamily:"'Plus Jakarta Sans',sans-serif", fontSize:14, outline:'none', colorScheme:'dark' }}/>
+                  </div>
+                </div>
+                <div style={{ marginBottom:12 }}>
+                  <SectionLabel>Серия и номер паспорта</SectionLabel>
+                  <input value={verifForm.passportNumber} onChange={e=>setVerifForm(f=>({...f,passportNumber:e.target.value}))}
+                    placeholder="AA 1234567"
+                    style={{ width:'100%', boxSizing:'border-box', padding:'10px 14px', borderRadius:10, border:`1.5px solid ${T.border}`, background:T.bgInput, color:T.text, fontFamily:"'Plus Jakarta Sans',sans-serif", fontSize:14, outline:'none' }}/>
+                </div>
+                <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:16 }}>
+                  {[['passportPhoto','📄 Фото паспорта'],['selfiePhoto','🤳 Селфи с паспортом']].map(([key,label]) => (
+                    <label key={key} style={{ display:'flex', flexDirection:'column', alignItems:'center', gap:8, padding:'16px', borderRadius:12, border:`1.5px dashed ${verifFiles[key]?T.accent:T.border}`, background:verifFiles[key]?T.accentBg:T.bgInput, cursor:'pointer', transition:'all 0.2s' }}>
+                      <div style={{ fontSize:24 }}>{verifFiles[key] ? '✅' : '📎'}</div>
+                      <div style={{ fontSize:12, fontWeight:600, color:verifFiles[key]?T.accent:T.textSub, textAlign:'center' }}>
+                        {verifFiles[key] ? verifFiles[key].name : label}
+                      </div>
+                      <input type="file" accept="image/*" style={{ display:'none' }} onChange={e=>setVerifFiles(f=>({...f,[key]:e.target.files[0]}))}/>
+                    </label>
+                  ))}
+                </div>
+                <div style={{ display:'flex', gap:10 }}>
+                  <Btn variant="secondary" onClick={()=>setShowVerifForm(false)}>Отмена</Btn>
+                  <Btn onClick={submitVerification} disabled={verifLoading}>{verifLoading?<Spinner/>:'Отправить на проверку'}</Btn>
+                </div>
+              </div>
+            )}
+          </Card>
+        )}
+
         {/* Stats cards */}
-        <div style={{ display:'grid', gridTemplateColumns:'repeat(3,1fr)', gap:12, marginBottom:16 }}>
+        <div style={{ display:'grid', gridTemplateColumns:'repeat(4,1fr)', gap:12, marginBottom:16 }}>
           {[
-            { icon:'🧭', val: stats.totalTrips ?? 0,   label:'Поездок' },
-            { icon:'📋', val: stats.postsCreated ?? 0, label:'Создано' },
-            { icon:'🤝', val: stats.tripsJoined ?? 0,  label:'Участий' },
-          ].map(s => (
-            <Card key={s.label} style={{ padding:'18px 20px', textAlign:'center' }}>
+            { icon:'🧭', val: stats.totalTrips ?? 0,   label:'Поездок', click: null },
+            { icon:'📋', val: stats.postsCreated ?? 0, label:'Создано', click: null },
+            { icon:'🤝', val: stats.tripsJoined ?? 0,  label:'Участий', click: null },
+            { icon:'👥', val: stats.friendsCount ?? 0,  label:'Друзья', click: ()=>setShowFriendsModal(true) },
+          ].map((s,i) => (
+            <Card key={s.label} style={{ padding:'18px 20px', textAlign:'center', cursor:s.click?'pointer':'default', transition:'all 0.15s', animation:'count-in 0.5s ease both', animationDelay:(0.1+i*0.1)+'s' }} onClick={s.click||undefined}>
               <div style={{ fontSize:22 }}>{s.icon}</div>
-              <div style={{ fontSize:26, fontWeight:800, color:T.text, marginTop:4 }}>{s.val}</div>
+              <div style={{ fontSize:26, fontWeight:800, color:s.click?T.accent:T.text, marginTop:4 }}>{s.val}</div>
               <div style={{ fontSize:11, color:T.textMuted, fontWeight:600, marginTop:2, textTransform:'uppercase', letterSpacing:'0.05em' }}>{s.label}</div>
             </Card>
           ))}
         </div>
+
+        {/* Модалка друзей */}
+        {showFriendsModal && (
+          <FriendsModal
+            targetUserId={userId}
+            currentUser={currentUser}
+            onClose={()=>setShowFriendsModal(false)}
+            onOpenProfile={id=>{ setShowFriendsModal(false); onNavigateProfile&&onNavigateProfile(id); }}
+            onOpenDM={friend=>{ setShowFriendsModal(false); onOpenDM&&onOpenDM(friend); }}
+          />
+        )}
 
         {/* Rating + Activity */}
         <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12, marginBottom:16 }}>
@@ -1273,6 +2077,105 @@ function ProfilePage({ userId, currentUser }) {
           </Card>
         )}
 
+        {/* Ghost stats */}
+        {(user.totalConfirmedEvents > 0 || user.ghostPercent > 0) && (
+          <Card style={{ padding:20, marginBottom:16, borderColor: user.ghostPercent > 50 ? T.danger : user.ghostPercent > 20 ? T.gold : T.border }}>
+            <div style={{ display:'flex', alignItems:'center', gap:14 }}>
+              <div style={{ fontSize:32 }}>💨</div>
+              <div style={{ flex:1 }}>
+                <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+                  <div style={{ fontSize:14, fontWeight:700, color:T.text }}>Уровень воздухана</div>
+                  <span style={{ fontSize:13, fontWeight:800, color: user.ghostPercent > 50 ? T.danger : user.ghostPercent > 20 ? T.gold : T.success }}>
+                    {user.ghostPercent}%
+                  </span>
+                </div>
+                <div style={{ fontSize:12, color:T.textMuted }}>
+                  Не явился на {user.ghostEvents} из {user.totalConfirmedEvents} подтверждённых событий
+                </div>
+                <div style={{ marginTop:8, height:6, borderRadius:99, background:'rgba(255,255,255,0.06)', overflow:'hidden' }}>
+                  <div style={{ height:'100%', borderRadius:99, width:`${user.ghostPercent}%`, background: user.ghostPercent > 50 ? T.danger : user.ghostPercent > 20 ? T.gold : T.success, transition:'width 0.6s ease' }}/>
+                </div>
+              </div>
+            </div>
+          </Card>
+        )}
+
+        {/* Goals (School 21 style) */}
+        {(() => {
+          const s = user.stats || {};
+          const goals = [
+            { id:'first_trip',    icon:'🧭', title:'Первый поход',          desc:'Прими участие в поездке',           target:1,    value:s.tripsJoined??0,    cat:'trips' },
+            { id:'trips5',        icon:'⛺', title:'Активный',               desc:'5 участий',                         target:5,    value:s.tripsJoined??0,    cat:'trips' },
+            { id:'trips15',       icon:'🏔', title:'Ветеран гор',             desc:'15 участий',                        target:15,   value:s.tripsJoined??0,    cat:'trips' },
+            { id:'trips30',       icon:'🦅', title:'Легенда',                 desc:'30 участий',                        target:30,   value:s.tripsJoined??0,    cat:'trips' },
+            { id:'first_event',   icon:'📋', title:'Первый организатор',      desc:'Создай событие',                    target:1,    value:s.postsCreated??0,   cat:'org' },
+            { id:'events5',       icon:'🎯', title:'Мастер организации',      desc:'Создай 5 событий',                  target:5,    value:s.postsCreated??0,   cat:'org' },
+            { id:'events10',      icon:'🏕', title:'Клубный лидер',           desc:'Создай 10 событий',                 target:10,   value:s.postsCreated??0,   cat:'org' },
+            { id:'first_friend',  icon:'🤝', title:'Первый друг',             desc:'Добавь друга',                      target:1,    value:s.friendsCount??0,   cat:'social' },
+            { id:'friends10',     icon:'👥', title:'Компания',                desc:'10 друзей',                         target:10,   value:s.friendsCount??0,   cat:'social' },
+            { id:'friends25',     icon:'🌐', title:'Коннектор',               desc:'25 друзей',                         target:25,   value:s.friendsCount??0,   cat:'social' },
+            { id:'verified',      icon:'🛡️', title:'Верифицирован',           desc:'Подтверди личность',                target:1,    value:user.isVerified?1:0,cat:'trust', binary:true },
+            { id:'rating45',      icon:'⭐', title:'Надёжный',                desc:'Рейтинг 4.5+',                      target:4.5,  value:user.rating??0,      cat:'trust', isFloat:true },
+            { id:'reviews10',     icon:'💬', title:'Популярный',              desc:'10 отзывов',                        target:10,   value:user.reviewCount??0, cat:'trust' },
+            { id:'no_ghost',      icon:'👻', title:'Честный участник',        desc:'Уровень воздухана 0%',              target:1,    value:(user.totalConfirmedEvents>0&&user.ghostPercent===0)?1:0, cat:'trust', binary:true },
+          ];
+          const achieved = goals.filter(g => g.isFloat ? g.value >= g.target : g.value >= g.target);
+          const inProgress = goals.filter(g => g.isFloat ? g.value < g.target : g.value < g.target);
+          return (
+            <div style={{ marginBottom:16 }}>
+              <div style={{ fontSize:15, fontWeight:800, color:T.text, marginBottom:16 }}>🎯 Цели</div>
+              {achieved.length > 0 && (
+                <div style={{ marginBottom:14 }}>
+                  <div style={{ fontSize:11, fontWeight:700, color:T.success, textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:8 }}>✅ Достигнуто ({achieved.length})</div>
+                  <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:8 }}>
+                    {achieved.map(g => (
+                      <div key={g.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'12px 14px', borderRadius:12, background:T.successBg, border:`1px solid ${T.success}33` }}>
+                        <div style={{ fontSize:22, flexShrink:0 }}>{g.icon}</div>
+                        <div>
+                          <div style={{ fontSize:13, fontWeight:700, color:T.success }}>{g.title}</div>
+                          <div style={{ fontSize:11, color:T.textMuted }}>{g.desc}</div>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+              {inProgress.length > 0 && (
+                <div>
+                  <div style={{ fontSize:11, fontWeight:700, color:T.textMuted, textTransform:'uppercase', letterSpacing:'0.07em', marginBottom:8 }}>⏳ В процессе ({inProgress.length})</div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                    {inProgress.map(g => {
+                      const pct = g.binary ? 0 : Math.min(100, Math.round((g.value / g.target) * 100));
+                      const left = g.isFloat ? (g.target - g.value).toFixed(1) : g.target - Math.floor(g.value);
+                      return (
+                        <div key={g.id} style={{ padding:'14px 16px', borderRadius:12, background:T.bgInput, border:`1px solid ${T.border}` }}>
+                          <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:8 }}>
+                            <div style={{ fontSize:20, flexShrink:0 }}>{g.icon}</div>
+                            <div style={{ flex:1 }}>
+                              <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center' }}>
+                                <div style={{ fontSize:13, fontWeight:700, color:T.text }}>{g.title}</div>
+                                <div style={{ fontSize:11, fontWeight:700, color:T.textMuted }}>
+                                  {g.binary ? 'Не выполнено' : g.isFloat ? `${g.value.toFixed(1)} / ${g.target}` : `${Math.floor(g.value)} / ${g.target}`}
+                                </div>
+                              </div>
+                              <div style={{ fontSize:11, color:T.textMuted }}>{g.desc}{!g.binary && ` · осталось ${left}`}</div>
+                            </div>
+                          </div>
+                          {!g.binary && (
+                            <div style={{ height:5, borderRadius:99, background:'rgba(255,255,255,0.06)', overflow:'hidden' }}>
+                              <div style={{ height:'100%', borderRadius:99, width:`${pct}%`, background:T.accent, transition:'width 0.6s ease' }}/>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })()}
+
         {/* Reviews */}
         <SectionLabel>Отзывы ({user.reviewCount??0})</SectionLabel>
         {(!user.reviews||user.reviews.length===0) ? (
@@ -1282,7 +2185,7 @@ function ProfilePage({ userId, currentUser }) {
             {user.reviews.map(r => (
               <Card key={r.id} style={{ padding:18, animation:'fade-in 0.3s ease' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10 }}>
-                  <Av name={r.from.name} size={34}/>
+                  <Av name={r.from.name} size={34} url={r.from.avatarUrl} userId={r.from.id}/>
                   <div style={{ flex:1 }}>
                     <div style={{ fontSize:13, fontWeight:700, color:T.text }}>{r.from.name}</div>
                     <div style={{ fontSize:11, color:T.textMuted }}>{new Date(r.createdAt).toLocaleDateString('ru')}</div>
@@ -1759,7 +2662,560 @@ function RecsPage({ currentUser }) {
             {canEdit ? 'Рекомендаций пока нет. Добавь первую!' : 'Рекомендаций пока нет'}
           </div>
         )}
+
+        {/* Детальное модальное окно */}
+        {detailRec && (
+          <RecDetailModal
+            rec={detailRec}
+            onClose={()=>setDetailRec(null)}
+            canEditRec={canEditRec(detailRec)}
+            canDelete={canDelete(detailRec)}
+            onEdit={openEdit}
+            onRemove={remove}
+          />
+        )}
       </div>
+    </div>
+  );
+}
+
+// ── LANDING PAGE ──────────────────────────────────────────────────────────────
+function LandingPage({ onGetStarted }) {
+  const A='#E8703A',T='#F2F0EA',S='#8A8999',M='#44434E';
+  const BG='#09090F',BG2='#0D0D18',CARD='#13131E';
+  const BD='rgba(255,255,255,0.07)',BD2='rgba(255,255,255,0.14)';
+  const AD='rgba(232,112,58,0.18)',AG='rgba(232,112,58,0.35)';
+  const GOLD='#C9A84C',BLUE='#5B8FD4',GREEN='#4EAD82';
+  const FD="'Cormorant Garamond',Georgia,serif";
+  const FB="'Plus Jakarta Sans',sans-serif";
+
+  const [scrolled,setScrolled]=React.useState(false);
+  React.useEffect(()=>{
+    const h=()=>setScrolled(window.scrollY>20);
+    window.addEventListener('scroll',h,{passive:true});
+    return()=>window.removeEventListener('scroll',h);
+  },[]);
+
+  const BtnP=({children,onClick})=>(
+    <button onClick={onClick} style={{padding:'16px 36px',borderRadius:14,border:'none',background:A,color:'#fff',fontSize:16,fontWeight:700,cursor:'pointer',fontFamily:FB,display:'flex',alignItems:'center',gap:8,boxShadow:`0 8px 32px ${AG}`,transition:'all .2s'}}>
+      {children}
+    </button>
+  );
+  const BtnS=({children,onClick})=>(
+    <button onClick={onClick} style={{padding:'16px 36px',borderRadius:14,border:`1.5px solid ${BD2}`,background:'rgba(255,255,255,0.05)',color:T,fontSize:16,fontWeight:600,cursor:'pointer',fontFamily:FB,backdropFilter:'blur(12px)',transition:'all .2s'}}>
+      {children}
+    </button>
+  );
+  const Eyebrow=({children})=>(
+    <div style={{display:'inline-flex',alignItems:'center',gap:9,fontSize:11,fontWeight:700,letterSpacing:'.12em',textTransform:'uppercase',color:A,marginBottom:18}}>
+      <span style={{width:18,height:1.5,background:A,display:'inline-block'}}/>{children}
+    </div>
+  );
+
+  return (
+    <div style={{background:BG,color:T,fontFamily:FB,overflowX:'hidden'}}>
+      {/* NAV */}
+      <nav style={{position:'fixed',top:0,left:0,right:0,zIndex:500,padding:'0 64px',height:70,display:'flex',alignItems:'center',justifyContent:'space-between',borderBottom:`1px solid ${scrolled?BD:'transparent'}`,background:scrolled?'rgba(9,9,15,0.88)':'transparent',backdropFilter:scrolled?'blur(20px)':'none',transition:'all .35s'}}>
+        <div style={{fontFamily:FD,fontSize:26,fontWeight:600,color:T,display:'flex',alignItems:'center',gap:9}}>
+          <span style={{width:8,height:8,borderRadius:99,background:A,display:'inline-block',animation:'glow-ring 2.2s ease-in-out infinite'}}/>
+          Together
+        </div>
+        <div style={{display:'flex',gap:36}}>
+          {['Как это работает','Возможности','События','Отзывы'].map(l=>(
+            <span key={l} style={{fontSize:14,fontWeight:600,color:S,cursor:'pointer'}}>{l}</span>
+          ))}
+        </div>
+        <button onClick={onGetStarted} style={{background:A,color:'#fff',border:'none',cursor:'pointer',padding:'10px 24px',borderRadius:12,fontSize:14,fontWeight:700,fontFamily:FB,boxShadow:`0 4px 20px ${AG}`,transition:'all .2s'}}>
+          Попробовать бесплатно
+        </button>
+      </nav>
+
+      {/* HERO */}
+      <section style={{minHeight:'100vh',position:'relative',overflow:'hidden',display:'flex',alignItems:'center',justifyContent:'center'}}>
+        <div style={{position:'absolute',inset:0,background:`radial-gradient(ellipse 70% 55% at 18% 35%,rgba(232,112,58,.22) 0%,transparent 60%),radial-gradient(ellipse 55% 50% at 78% 22%,rgba(91,143,212,.18) 0%,transparent 55%),radial-gradient(ellipse 45% 55% at 50% 85%,rgba(78,173,130,.10) 0%,transparent 60%),${BG}`}}/>
+        {[...Array(80)].map((_,i)=>(
+          <div key={'ls'+i} style={{position:'absolute',left:((i*41+7)%100)+'%',top:((i*57+13)%80)+'%',width:(0.5+(i%3)*0.5)+'px',height:(0.5+(i%3)*0.5)+'px',borderRadius:'50%',background:'rgba(255,255,255,0.8)',animation:`twinkle ${2+i%4}s ${i*0.15}s ease-in-out infinite alternate`,pointerEvents:'none',zIndex:1}}/>
+        ))}
+        <div style={{position:'relative',zIndex:10,textAlign:'center',padding:'140px 60px 320px',maxWidth:1100,width:'100%'}}>
+          <div style={{display:'inline-flex',alignItems:'center',gap:8,background:AD,border:`1px solid rgba(232,112,58,.28)`,color:A,borderRadius:99,padding:'6px 18px',fontSize:12,fontWeight:700,letterSpacing:'.1em',textTransform:'uppercase',marginBottom:32,animation:'page-enter 0.6s ease both'}}>
+            <span style={{width:6,height:6,borderRadius:'50%',background:A,display:'inline-block'}}/>
+            14 000+ ИСКАТЕЛЕЙ ПРИКЛЮЧЕНИЙ
+          </div>
+          <div style={{animation:'slide-up 0.7s cubic-bezier(0.34,1.56,0.64,1) both',animationDelay:'0.1s'}}>
+            <div style={{fontFamily:FD,fontSize:'clamp(68px,8.5vw,120px)',fontWeight:300,lineHeight:.93,letterSpacing:'-.02em',color:T}}>Найди своих</div>
+            <div style={{fontFamily:FD,fontSize:'clamp(68px,8.5vw,120px)',fontWeight:700,lineHeight:.93,letterSpacing:'-.02em',fontStyle:'italic',color:A}}>попутчиков</div>
+            <div style={{fontFamily:FD,fontSize:'clamp(68px,8.5vw,120px)',fontWeight:600,lineHeight:.93,letterSpacing:'-.02em',color:T,marginBottom:24}}>в горы</div>
+          </div>
+          <p style={{fontSize:18,color:S,fontWeight:500,lineHeight:1.65,maxWidth:520,margin:'0 auto 48px',animation:'page-enter 0.6s ease both',animationDelay:'0.25s'}}>
+            Приложение для тех, кто хочет кататься на лыжах, ходить в походы и исследовать горы — вместе с классными людьми.
+          </p>
+          <div style={{display:'flex',gap:14,justifyContent:'center',flexWrap:'wrap',animation:'page-enter 0.6s ease both',animationDelay:'0.35s'}}>
+            <BtnP onClick={onGetStarted}>Начать бесплатно →</BtnP>
+            <BtnS onClick={onGetStarted}>Смотреть демо</BtnS>
+          </div>
+        </div>
+        {/* Mountains */}
+        <div style={{position:'absolute',bottom:0,left:0,right:0,zIndex:5,pointerEvents:'none'}}>
+          <svg viewBox="0 0 1440 300" preserveAspectRatio="none" style={{width:'100%',height:300,display:'block'}}>
+            <defs>
+              <linearGradient id="lpg1" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#E8703A" stopOpacity=".4"/>
+                <stop offset="100%" stopColor="#09090F" stopOpacity="1"/>
+              </linearGradient>
+              <linearGradient id="lpg2" x1="0" y1="0" x2="0" y2="1">
+                <stop offset="0%" stopColor="#5B8FD4" stopOpacity=".3"/>
+                <stop offset="100%" stopColor="#09090F" stopOpacity="1"/>
+              </linearGradient>
+            </defs>
+            <path d="M0,280 L100,190 L200,230 L340,110 L460,170 L570,85 L690,145 L790,65 L910,130 L1030,55 L1150,115 L1270,75 L1380,130 L1440,100 L1440,300 L0,300Z" fill="url(#lpg2)" opacity=".7"/>
+            <path d="M0,300 L80,248 L170,268 L290,198 L410,238 L530,168 L650,208 L750,158 L860,195 L980,142 L1080,178 L1180,155 L1300,188 L1380,165 L1440,175 L1440,300 L0,300Z" fill="url(#lpg1)" opacity=".85"/>
+            <path d="M0,300 L100,280 L200,290 L320,260 L440,278 L540,250 L660,265 L760,245 L860,258 L980,238 L1080,252 L1200,242 L1320,258 L1440,248 L1440,300 L0,300Z" fill="#09090F"/>
+            <path d="M333,110 L350,128 L368,120 L386,133 L333,110Z" fill="rgba(255,255,255,.22)"/>
+            <path d="M785,65 L802,84 L820,75 L838,88 L785,65Z" fill="rgba(255,255,255,.22)"/>
+            <path d="M1032,55 L1050,74 L1068,65 L1087,78 L1032,55Z" fill="rgba(255,255,255,.25)"/>
+          </svg>
+        </div>
+      </section>
+
+      {/* STATS */}
+      <div style={{background:CARD,borderTop:`1px solid ${BD}`,borderBottom:`1px solid ${BD}`,padding:'42px 64px',display:'grid',gridTemplateColumns:'repeat(4,1fr)'}}>
+        {[['14K+','Участников'],['2 400+','Поездок состоялось'],['4.9 ★','Средний рейтинг'],['38','Регионов России']].map(([n,l],i)=>(
+          <div key={i} style={{textAlign:'center',padding:'0 32px',borderRight:i<3?`1px solid ${BD}`:'none'}}>
+            <div style={{fontFamily:FD,fontSize:52,fontWeight:600,lineHeight:1,letterSpacing:'-.03em',color:T,marginBottom:8}}>{n}</div>
+            <div style={{fontSize:12,color:M,fontWeight:700,textTransform:'uppercase',letterSpacing:'.08em'}}>{l}</div>
+          </div>
+        ))}
+      </div>
+
+      {/* HOW IT WORKS */}
+      <section style={{padding:'120px 64px',maxWidth:1380,margin:'0 auto'}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:100,alignItems:'center'}}>
+          <div>
+            <Eyebrow>Как это работает</Eyebrow>
+            <h2 style={{fontFamily:FD,fontSize:'clamp(42px,5vw,68px)',fontWeight:300,lineHeight:1.06,letterSpacing:'-.02em',color:T,marginBottom:18}}>
+              Три шага<br/><span style={{fontStyle:'italic',color:A}}>до горы</span>
+            </h2>
+            <p style={{fontSize:17,color:S,fontWeight:500,lineHeight:1.7,maxWidth:500,marginBottom:44}}>
+              От идеи поехать кататься до реальной поездки с компанией — всё в одном приложении.
+            </p>
+            {[['01','Создай событие','Укажи активность, место, даты и уровень сложности. Займёт меньше минуты.'],['02','Найди команду','Читай отзывы участников, смотри рейтинги и присоединяйся к понравившимся поездкам.'],['03','Координируйтесь в чате','Для каждого события автоматически создаётся группа. Все участники там сразу.']].map(([n,t,d],i)=>(
+              <div key={i} style={{display:'flex',gap:24,padding:'28px 0',borderBottom:`1px solid ${BD}`,borderTop:i===0?`1px solid ${BD}`:'none'}}>
+                <div style={{fontFamily:FD,fontSize:13,fontWeight:600,color:M,marginTop:3,width:22,flexShrink:0}}>{n}</div>
+                <div><div style={{fontSize:17,fontWeight:700,color:T,marginBottom:5}}>{t}</div><div style={{fontSize:14,color:S,lineHeight:1.65,fontWeight:500}}>{d}</div></div>
+              </div>
+            ))}
+          </div>
+          {/* Phone mockup */}
+          <div style={{display:'flex',alignItems:'center',justifyContent:'center',position:'relative'}}>
+            <div style={{position:'absolute',width:280,height:280,borderRadius:99,background:`radial-gradient(circle,rgba(232,112,58,.22) 0%,transparent 70%)`,filter:'blur(40px)',animation:'float-y 5s ease-in-out infinite alternate'}}/>
+            <div style={{width:258,borderRadius:36,overflow:'hidden',position:'relative',zIndex:2,background:'#1C1C24',boxShadow:'0 0 0 1px rgba(255,255,255,.08),0 0 0 8px #0a0a0c,0 0 0 9px rgba(255,255,255,.05),0 60px 120px rgba(0,0,0,.7)',animation:'float-y 6s ease-in-out infinite'}}>
+              <div style={{padding:'26px 16px 18px',fontFamily:FB}}>
+                <div style={{display:'flex',justifyContent:'space-between',marginBottom:16,fontSize:12,fontWeight:700,color:T}}><span>9:41</span><span style={{fontSize:10,opacity:.7}}>●●● 88%</span></div>
+                <div style={{fontSize:18,fontWeight:800,color:T,marginBottom:12,letterSpacing:'-.02em'}}>События</div>
+                {[
+                  {nm:'Эльбрус',dt:'14–17 фев',sp:'4/6',pct:'66%',lv:'Профи',lc:A},
+                  {nm:'Кузрак',dt:'8–10 мар',sp:'3/8',pct:'37%',lv:'Средний',lc:'#E8A83A'},
+                  {nm:'Алтай',dt:'12–19 июл',sp:'2/10',pct:'20%',lv:'Новичок',lc:GREEN},
+                ].map((e,i)=>(
+                  <div key={i} style={{background:'#252530',borderRadius:13,padding:12,marginBottom:7,border:'1px solid rgba(255,255,255,.05)'}}>
+                    <div style={{display:'flex',gap:8,alignItems:'center',marginBottom:7}}>
+                      <div style={{width:30,height:30,borderRadius:9,background:`${e.lc}33`,display:'flex',alignItems:'center',justifyContent:'center',flexShrink:0,fontSize:13}}>⛰</div>
+                      <div style={{flex:1}}><div style={{fontSize:12,fontWeight:700,color:T}}>{e.nm}</div><div style={{fontSize:10,color:S,marginTop:1}}>{e.dt} · {e.sp} мест</div></div>
+                      <span style={{fontSize:10,fontWeight:700,borderRadius:99,padding:'2px 8px',background:`${e.lc}22`,color:e.lc}}>{e.lv}</span>
+                    </div>
+                    <div style={{height:3,borderRadius:99,background:'rgba(255,255,255,.06)',overflow:'hidden'}}>
+                      <div style={{height:'100%',borderRadius:99,width:e.pct,background:e.lc}}/>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <div style={{borderTop:`1px solid ${BD}`,margin:'0 64px'}}/>
+
+      {/* FEATURES */}
+      <section style={{padding:'120px 64px',maxWidth:1380,margin:'0 auto'}}>
+        <div style={{display:'grid',gridTemplateColumns:'1fr 1fr',gap:60,alignItems:'end',marginBottom:64}}>
+          <div>
+            <Eyebrow>Возможности</Eyebrow>
+            <h2 style={{fontFamily:FD,fontSize:'clamp(42px,5vw,68px)',fontWeight:300,lineHeight:1.06,letterSpacing:'-.02em',color:T}}>
+              Всё что нужно<br/>для <span style={{fontStyle:'italic',color:A}}>поездки</span>
+            </h2>
+          </div>
+          <p style={{fontSize:17,color:S,fontWeight:500,lineHeight:1.7}}>Together — не просто доска объявлений. Это полноценный инструмент для организации групповых приключений.</p>
+        </div>
+        <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:18}}>
+          {[
+            {ico:'🔍',t:'Умный поиск',d:'Фильтруй по активности, датам, уровню, транспорту и бюджету.',c:A,tag:'Поиск по 6 параметрам'},
+            {ico:'💬',t:'Групповые чаты',d:'При вступлении в событие ты автоматически попадаешь в чат группы.',c:BLUE,tag:'Авто-создание группы'},
+            {ico:'⭐',t:'Рейтинги и отзывы',d:'Только реальные отзывы от участников поездок. Оценивай попутчиков.',c:GOLD,tag:'Верифицированные'},
+            {ico:'🛡',t:'Безопасность',d:'Система жалоб и модерация. Все участники проходят верификацию.',c:GREEN,tag:'Модерация 24/7'},
+            {ico:'🚗',t:'Организация транспорта',d:'Укажи — есть ли у тебя машина, ищешь подвоз или едешь общественным.',c:A,tag:'3 опции транспорта'},
+            {ico:'📊',t:'Статистика активности',d:'История поездок, графики активности и растущий рейтинг участника.',c:BLUE,tag:'Личная статистика'},
+          ].map((f,i)=>(
+            <div key={i} style={{background:CARD,border:`1px solid ${BD}`,borderRadius:22,padding:30,transition:'all .28s'}}>
+              <div style={{width:46,height:46,borderRadius:13,background:`${f.c}22`,border:`1px solid ${f.c}33`,display:'flex',alignItems:'center',justifyContent:'center',marginBottom:18,fontSize:22}}>{f.ico}</div>
+              <div style={{fontSize:17,fontWeight:700,color:T,marginBottom:9}}>{f.t}</div>
+              <div style={{fontSize:14,color:S,lineHeight:1.7,fontWeight:500,marginBottom:14}}>{f.d}</div>
+              <span style={{display:'inline-flex',fontSize:11,fontWeight:700,letterSpacing:'.06em',textTransform:'uppercase',padding:'4px 12px',borderRadius:99,background:`${f.c}22`,color:f.c}}>{f.tag}</span>
+            </div>
+          ))}
+        </div>
+      </section>
+
+      <div style={{borderTop:`1px solid ${BD}`,margin:'0 64px'}}/>
+
+      {/* TESTIMONIALS */}
+      <section style={{background:BG2,padding:'120px 64px'}}>
+        <div style={{maxWidth:1280,margin:'0 auto'}}>
+          <div style={{textAlign:'center',marginBottom:56}}>
+            <Eyebrow>Отзывы участников</Eyebrow>
+            <h2 style={{fontFamily:FD,fontSize:'clamp(42px,5vw,68px)',fontWeight:300,lineHeight:1.06,letterSpacing:'-.02em',color:T,marginBottom:14}}>
+              Они уже <span style={{fontStyle:'italic',color:A}}>съездили</span>
+            </h2>
+          </div>
+          <div style={{display:'grid',gridTemplateColumns:'repeat(3,1fr)',gap:18}}>
+            {[
+              {stars:5,txt:'"Нашла компанию для похода на Кузрак за 2 дня. Раньше казалось невозможным — все друзья заняты. Теперь езжу каждый месяц!"',nm:'Маша В.',sub:'8 поездок · Москва',bg:'#3A7A5C'},
+              {stars:5,txt:'"Создал событие на Эльбрус — через день набралась полная группа. Отличные ребята. Приложение реально работает."',nm:'Алексей М.',sub:'14 поездок · Рейтинг 4.8★',bg:'#7A5C3A'},
+              {stars:4,txt:'"Понравилась система рейтингов — видно кто надёжный. Безопасно знакомиться для совместных поездок."',nm:'Светлана Р.',sub:'5 поездок · Санкт-Петербург',bg:'#5C3A7A'},
+            ].map((tc,i)=>(
+              <div key={i} style={{background:CARD,border:`1px solid ${BD}`,borderRadius:22,padding:30}}>
+                <div style={{color:GOLD,marginBottom:16,fontSize:16}}>{'★'.repeat(tc.stars)}{'☆'.repeat(5-tc.stars)}</div>
+                <p style={{fontSize:15,color:S,lineHeight:1.75,fontWeight:500,marginBottom:22,fontStyle:'italic'}}>{tc.txt}</p>
+                <div style={{display:'flex',gap:12,alignItems:'center'}}>
+                  <div style={{width:40,height:40,borderRadius:99,background:tc.bg,display:'flex',alignItems:'center',justifyContent:'center',fontSize:13,fontWeight:800,color:'rgba(0,0,0,.5)',flexShrink:0}}>{tc.nm.slice(0,2).toUpperCase()}</div>
+                  <div><div style={{fontSize:14,fontWeight:700,color:T}}>{tc.nm}</div><div style={{fontSize:12,color:M,marginTop:1}}>{tc.sub}</div></div>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      </section>
+
+      {/* CTA */}
+      <div style={{padding:'0 64px 140px',maxWidth:1380,margin:'0 auto'}}>
+        <div style={{background:CARD,border:`1px solid ${BD}`,borderRadius:38,padding:'100px 80px',textAlign:'center',position:'relative',overflow:'hidden'}}>
+          <div style={{position:'absolute',inset:0,background:`radial-gradient(ellipse 65% 55% at 28% 50%,rgba(232,112,58,.22) 0%,transparent 60%),radial-gradient(ellipse 50% 55% at 72% 50%,rgba(91,143,212,.14) 0%,transparent 60%)`}}/>
+          <div style={{position:'absolute',bottom:0,left:0,right:0,opacity:.05,pointerEvents:'none'}}>
+            <svg viewBox="0 0 1200 260" preserveAspectRatio="none" style={{height:260,width:'100%'}}>
+              <path d="M0,260 L140,165 L270,215 L410,115 L550,180 L670,95 L810,155 L930,75 L1060,135 L1200,105 L1200,260Z" fill="white"/>
+            </svg>
+          </div>
+          <div style={{position:'relative',zIndex:2}}>
+            <div style={{display:'inline-flex',alignItems:'center',gap:8,background:AD,border:`1px solid rgba(232,112,58,.28)`,color:A,borderRadius:99,padding:'6px 18px',fontSize:12,fontWeight:700,letterSpacing:'.1em',textTransform:'uppercase',marginBottom:24}}>
+              <span style={{width:6,height:6,borderRadius:'50%',background:A,display:'inline-block'}}/>Бесплатно навсегда
+            </div>
+            <h2 style={{fontFamily:FD,fontSize:'clamp(46px,5vw,78px)',fontWeight:300,lineHeight:1.06,letterSpacing:'-.02em',color:T,marginBottom:18}}>
+              Твоя следующая<br/><span style={{fontStyle:'italic',color:A}}>вершина</span> ждёт
+            </h2>
+            <p style={{fontSize:18,color:S,fontWeight:500,maxWidth:460,margin:'0 auto 46px',lineHeight:1.65}}>
+              Присоединяйся к 14 000+ людям, которые уже нашли попутчиков для своих приключений.
+            </p>
+            <div style={{display:'flex',gap:14,justifyContent:'center',flexWrap:'wrap'}}>
+              <BtnP onClick={onGetStarted}>Начать бесплатно →</BtnP>
+              <BtnS onClick={onGetStarted}>Открыть в браузере</BtnS>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* FOOTER */}
+      <footer style={{borderTop:`1px solid ${BD}`,padding:'44px 64px',display:'flex',justifyContent:'space-between',alignItems:'center',flexWrap:'wrap',gap:16}}>
+        <div style={{fontFamily:FD,fontSize:22,fontWeight:600,color:T,display:'flex',alignItems:'center',gap:8}}>
+          <span style={{width:6,height:6,borderRadius:99,background:A,display:'inline-block'}}/>Together
+        </div>
+        <div style={{display:'flex',gap:26,flexWrap:'wrap'}}>
+          {['О проекте','Безопасность','Блог','Поддержка','Конфиденциальность'].map(l=>(
+            <span key={l} style={{fontSize:13,color:M,fontWeight:600,cursor:'pointer'}}>{l}</span>
+          ))}
+        </div>
+        <div style={{fontSize:13,color:M,fontWeight:500}}>© 2026 Together. Все права защищены.</div>
+      </footer>
+    </div>
+  );
+}
+
+// ── LEADERBOARD ───────────────────────────────────────────────────────────────
+function LeaderboardPage({ onNavigateProfile }) {
+  const [period, setPeriod] = React.useState('week');
+  const [data, setData] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+
+  React.useEffect(() => {
+    setLoading(true);
+    api.getLeaderboard(period).then(d => { setData(d); setLoading(false); }).catch(() => setLoading(false));
+  }, [period]);
+
+  const medals = ['🥇','🥈','🥉'];
+  const periodLabels = { week:'Неделя', month:'Месяц', all:'Всё время' };
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', padding:32 }}>
+      <div style={{ maxWidth:700, margin:'0 auto' }}>
+        <div style={{ fontSize:26, fontWeight:800, color:T.text, marginBottom:4 }}>🏆 Топ гуляльщиков</div>
+        <div style={{ fontSize:14, color:T.textMuted, marginBottom:24 }}>Самые активные участники платформы</div>
+
+        {/* Period tabs */}
+        <div style={{ display:'flex', gap:8, marginBottom:28 }}>
+          {['week','month','all'].map(p => (
+            <button key={p} onClick={()=>setPeriod(p)}
+              style={{ padding:'9px 22px', borderRadius:99, border:`1.5px solid ${period===p?T.accent:T.border}`, background:period===p?T.accentBg:T.bgInput, color:period===p?T.accent:T.textSub, fontFamily:"'Plus Jakarta Sans',sans-serif", fontSize:13, fontWeight:700, cursor:'pointer', transition:'all 0.15s' }}>
+              {periodLabels[p]}
+            </button>
+          ))}
+        </div>
+
+        {loading ? <div style={{ display:'flex', justifyContent:'center', padding:60 }}><Spinner/></div> :
+          data.length === 0
+            ? <div style={{ textAlign:'center', color:T.textMuted, fontSize:14, padding:'60px 0' }}>Пока нет данных за этот период</div>
+            : <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
+                {data.map((u, i) => (
+                  <Card key={u.id} style={{ padding:'16px 20px', cursor:'pointer', transition:'all 0.15s', animation:`count-in 0.4s ease both`, animationDelay:`${i*0.04}s` }}
+                    onClick={()=>onNavigateProfile(u.id)}>
+                    <div style={{ display:'flex', alignItems:'center', gap:16 }}>
+                      {/* Rank */}
+                      <div style={{ width:40, textAlign:'center', fontSize: i<3?26:16, fontWeight:800, color: i===0?T.gold:i===1?'#C0C0C0':i===2?'#CD7F32':T.textMuted, flexShrink:0 }}>
+                        {i < 3 ? medals[i] : `#${u.rank}`}
+                      </div>
+                      <Av name={u.name} size={44} url={u.avatarUrl} userId={u.id}/>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:6 }}>
+                          <div style={{ fontSize:15, fontWeight:700, color:T.text }}>{u.name}</div>
+                          {u.isVerified && <VerifiedBadge/>}
+                        </div>
+                        <div style={{ fontSize:12, color:T.textMuted }}>@{u.username}</div>
+                      </div>
+                      {/* Stats */}
+                      <div style={{ display:'flex', gap:16, flexShrink:0 }}>
+                        <div style={{ textAlign:'center' }}>
+                          <div style={{ fontSize:18, fontWeight:800, color:T.accent }}>{u.score}</div>
+                          <div style={{ fontSize:10, color:T.textMuted, fontWeight:600, textTransform:'uppercase' }}>очков</div>
+                        </div>
+                        <div style={{ textAlign:'center' }}>
+                          <div style={{ fontSize:15, fontWeight:700, color:T.text }}>{u.tripsJoined}</div>
+                          <div style={{ fontSize:10, color:T.textMuted, fontWeight:600, textTransform:'uppercase' }}>участий</div>
+                        </div>
+                        <div style={{ textAlign:'center' }}>
+                          <div style={{ fontSize:15, fontWeight:700, color:T.text }}>{u.postsCreated}</div>
+                          <div style={{ fontSize:10, color:T.textMuted, fontWeight:600, textTransform:'uppercase' }}>событий</div>
+                        </div>
+                      </div>
+                    </div>
+                    {/* Progress bar — relative to first place */}
+                    {data[0] && (
+                      <div style={{ marginTop:10, height:3, borderRadius:99, background:'rgba(255,255,255,0.06)', overflow:'hidden' }}>
+                        <div style={{ height:'100%', borderRadius:99, width:`${Math.round((u.score/data[0].score)*100)}%`, background: i===0?T.gold:i===1?'#C0C0C0':i===2?'#CD7F32':T.accent, transition:'width 0.6s ease' }}/>
+                      </div>
+                    )}
+                  </Card>
+                ))}
+              </div>
+        }
+      </div>
+    </div>
+  );
+}
+
+// ── ATTENDANCE MODAL ───────────────────────────────────────────────────────────
+function AttendanceModal({ post, currentUser, onClose, onDone }) {
+  const participants = post.participants.filter(p => p.status === 'approved' && p.userId !== currentUser.id);
+  const [present, setPresent] = React.useState(() => {
+    const m = {};
+    participants.forEach(p => { m[p.userId] = true; });
+    return m;
+  });
+  const [loading, setLoading] = React.useState(false);
+
+  const toggle = id => setPresent(p => ({ ...p, [id]: !p[id] }));
+
+  const submit = async () => {
+    setLoading(true);
+    try {
+      const presentIds = Object.entries(present).filter(([,v])=>v).map(([k])=>parseInt(k));
+      await api.submitAttendance(post.id, presentIds);
+      toast('Посещаемость отмечена ✓');
+      onDone();
+    } catch(e) { toast(e.message, 'error'); }
+    setLoading(false);
+  };
+
+  return (
+    <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.75)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}>
+      <Card style={{ padding:28, width:460, maxHeight:'80vh', display:'flex', flexDirection:'column', animation:'bounce-in 0.35s ease' }}>
+        <div style={{ fontSize:18, fontWeight:800, color:T.text, marginBottom:4 }}>✅ Отметить участников</div>
+        <div style={{ fontSize:13, color:T.textMuted, marginBottom:20 }}>Отметьте кто реально был на событии «{post.location}»</div>
+        <div style={{ flex:1, overflowY:'auto', display:'flex', flexDirection:'column', gap:8, marginBottom:20 }}>
+          {participants.length === 0
+            ? <div style={{ color:T.textMuted, fontSize:14 }}>Нет других участников</div>
+            : participants.map(pt => (
+              <button key={pt.userId} onClick={()=>toggle(pt.userId)}
+                style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', borderRadius:12, border:`1.5px solid ${present[pt.userId]?T.accent:T.border}`, background:present[pt.userId]?T.accentBg:T.bgInput, cursor:'pointer', fontFamily:"'Plus Jakarta Sans',sans-serif", transition:'all 0.15s', textAlign:'left' }}>
+                <div style={{ width:22, height:22, borderRadius:6, border:`2px solid ${present[pt.userId]?T.accent:T.textMuted}`, background:present[pt.userId]?T.accent:'transparent', display:'flex', alignItems:'center', justifyContent:'center', flexShrink:0, transition:'all 0.15s' }}>
+                  {present[pt.userId] && <svg viewBox="0 0 12 12" width="10" height="10" fill="none"><polyline points="2,6 5,9 10,3" stroke="#fff" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round"/></svg>}
+                </div>
+                <Av name={pt.user.name} size={34} url={pt.user.avatarUrl} userId={pt.userId}/>
+                <div style={{ flex:1 }}>
+                  <div style={{ fontSize:13, fontWeight:700, color:T.text }}>{pt.user.name}</div>
+                  <div style={{ fontSize:11, color:T.textMuted }}>@{pt.user.username}</div>
+                </div>
+                <div style={{ fontSize:12, fontWeight:700, color:present[pt.userId]?T.success:T.danger }}>
+                  {present[pt.userId] ? '✓ Был' : '✗ Не был'}
+                </div>
+              </button>
+            ))
+          }
+        </div>
+        <div style={{ display:'flex', gap:10 }}>
+          <Btn variant="secondary" onClick={onClose}>Отмена</Btn>
+          <Btn onClick={submit} disabled={loading} full>{loading?<Spinner/>:'Подтвердить'}</Btn>
+        </div>
+      </Card>
+    </div>
+  );
+}
+
+// ── MODERATION PANEL ──────────────────────────────────────────────────────────
+function ModerationPanel() {
+  const [requests, setRequests] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [filter, setFilter] = React.useState('pending');
+  const [rejectModal, setRejectModal] = React.useState(null); // {id}
+  const [rejectReason, setRejectReason] = React.useState('');
+  const [actionLoading, setActionLoading] = React.useState(false);
+
+  const load = async () => {
+    setLoading(true);
+    try { setRequests(await api.getVerificationRequests()); } catch(e) { toast(e.message,'error'); }
+    setLoading(false);
+  };
+  React.useEffect(() => { load(); }, []);
+
+  const approve = async (id) => {
+    setActionLoading(true);
+    try {
+      await api.approveVerification(id);
+      toast('Верификация одобрена ✓');
+      load();
+    } catch(e) { toast(e.message,'error'); }
+    setActionLoading(false);
+  };
+
+  const openReject = (id) => { setRejectModal({ id }); setRejectReason(''); };
+
+  const confirmReject = async () => {
+    if (!rejectReason.trim()) return toast('Укажите причину', 'error');
+    setActionLoading(true);
+    try {
+      await api.rejectVerification(rejectModal.id, rejectReason.trim());
+      toast('Заявка отклонена');
+      setRejectModal(null);
+      load();
+    } catch(e) { toast(e.message,'error'); }
+    setActionLoading(false);
+  };
+
+  const filtered = requests.filter(r => filter === 'all' || r.status === filter);
+
+  return (
+    <div style={{ flex:1, overflowY:'auto', padding:32 }}>
+      <div style={{ maxWidth:900, margin:'0 auto' }}>
+        <div style={{ fontSize:26, fontWeight:800, color:T.text, marginBottom:6 }}>Панель модерации</div>
+        <div style={{ fontSize:14, color:T.textMuted, marginBottom:24 }}>Проверка заявок на верификацию личности</div>
+
+        {/* Фильтры */}
+        <div style={{ display:'flex', gap:8, marginBottom:20 }}>
+          {[['pending','⏳ Ожидают'],['approved','✅ Одобрены'],['rejected','❌ Отклонены'],['all','Все']].map(([s,l]) => (
+            <button key={s} onClick={()=>setFilter(s)}
+              style={{ padding:'8px 16px', borderRadius:20, border:`1.5px solid ${filter===s?T.accent:T.border}`, background:filter===s?T.accentBg:T.bgInput, color:filter===s?T.accent:T.textSub, fontFamily:"'Plus Jakarta Sans',sans-serif", fontSize:13, fontWeight:600, cursor:'pointer', transition:'all 0.15s' }}>
+              {l} {s !== 'all' && <span style={{ marginLeft:4, fontSize:11 }}>({requests.filter(r=>r.status===s).length})</span>}
+            </button>
+          ))}
+        </div>
+
+        {loading ? <div style={{ display:'flex', justifyContent:'center', padding:60 }}><Spinner/></div> : (
+          filtered.length === 0
+            ? <div style={{ color:T.textMuted, fontSize:14, padding:'40px 0', textAlign:'center' }}>Заявок нет</div>
+            : <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+                {filtered.map(req => (
+                  <Card key={req.id} style={{ padding:20, animation:'fade-in 0.3s ease' }}>
+                    <div style={{ display:'flex', alignItems:'flex-start', gap:16, marginBottom:16 }}>
+                      <Av name={req.user.name} size={44} url={req.user.avatarUrl} userId={req.user.id}/>
+                      <div style={{ flex:1 }}>
+                        <div style={{ display:'flex', alignItems:'center', gap:8, marginBottom:4 }}>
+                          <div style={{ fontSize:15, fontWeight:700, color:T.text }}>{req.user.name}</div>
+                          <Tag color={req.status==='approved'?T.success:req.status==='rejected'?T.danger:T.gold}
+                               bg={req.status==='approved'?T.successBg:req.status==='rejected'?T.dangerBg:T.goldBg}>
+                            {req.status==='approved'?'Одобрен':req.status==='rejected'?'Отклонён':'Ожидает'}
+                          </Tag>
+                        </div>
+                        <div style={{ fontSize:12, color:T.textMuted }}>@{req.user.username} · Подано {new Date(req.createdAt).toLocaleDateString('ru')}</div>
+                      </div>
+                      {req.status === 'pending' && (
+                        <div style={{ display:'flex', gap:8 }}>
+                          <Btn onClick={()=>approve(req.id)} disabled={actionLoading}>✓ Одобрить</Btn>
+                          <Btn variant="danger" onClick={()=>openReject(req.id)} disabled={actionLoading}>✕ Отклонить</Btn>
+                        </div>
+                      )}
+                    </div>
+
+                    {/* Паспортные данные */}
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr 1fr', gap:12, marginBottom:14, padding:'12px 14px', background:T.bgInput, borderRadius:10 }}>
+                      <div>
+                        <div style={{ fontSize:10, color:T.textMuted, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:3 }}>ФИО</div>
+                        <div style={{ fontSize:13, color:T.text, fontWeight:600 }}>{req.fullName}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:10, color:T.textMuted, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:3 }}>Паспорт</div>
+                        <div style={{ fontSize:13, color:T.text, fontWeight:600 }}>{req.passportNumber}</div>
+                      </div>
+                      <div>
+                        <div style={{ fontSize:10, color:T.textMuted, fontWeight:700, textTransform:'uppercase', letterSpacing:'0.06em', marginBottom:3 }}>Дата рождения</div>
+                        <div style={{ fontSize:13, color:T.text, fontWeight:600 }}>{req.birthDate}</div>
+                      </div>
+                    </div>
+
+                    {/* Фото */}
+                    <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:12 }}>
+                      {[['passportPhotoUrl','📄 Фото паспорта'],['selfiePhotoUrl','🤳 Селфи с паспортом']].map(([key,label]) => (
+                        <div key={key}>
+                          <div style={{ fontSize:11, fontWeight:700, color:T.textMuted, marginBottom:6 }}>{label}</div>
+                          <a href={req[key]} target="_blank" rel="noreferrer">
+                            <img src={req[key]} alt={label}
+                              style={{ width:'100%', borderRadius:10, objectFit:'cover', maxHeight:180, border:`1px solid ${T.border}`, cursor:'zoom-in' }}
+                              onError={e=>{ e.target.alt='Не загружено'; e.target.style.opacity='0.3'; }}/>
+                          </a>
+                        </div>
+                      ))}
+                    </div>
+
+                    {req.status === 'rejected' && req.rejectionReason && (
+                      <div style={{ marginTop:12, padding:'10px 14px', background:T.dangerBg, borderRadius:8, fontSize:13, color:T.danger }}>
+                        <strong>Причина отклонения:</strong> {req.rejectionReason}
+                      </div>
+                    )}
+                  </Card>
+                ))}
+              </div>
+        )}
+      </div>
+
+      {/* Модалка отклонения */}
+      {rejectModal && (
+        <div style={{ position:'fixed', inset:0, background:'rgba(0,0,0,0.7)', display:'flex', alignItems:'center', justifyContent:'center', zIndex:1000 }}>
+          <Card style={{ padding:28, width:440, animation:'bounce-in 0.35s ease' }}>
+            <div style={{ fontSize:16, fontWeight:700, color:T.text, marginBottom:14 }}>Причина отклонения</div>
+            <Textarea value={rejectReason} onChange={setRejectReason} placeholder="Опишите причину: нечёткое фото, данные не совпадают, поддельный документ…" rows={4}/>
+            <div style={{ display:'flex', gap:10, marginTop:16 }}>
+              <Btn variant="secondary" onClick={()=>setRejectModal(null)}>Отмена</Btn>
+              <Btn variant="danger" onClick={confirmReject} disabled={actionLoading}>{actionLoading?<Spinner/>:'Отклонить'}</Btn>
+            </div>
+          </Card>
+        </div>
+      )}
     </div>
   );
 }
@@ -1770,20 +3226,76 @@ function App() {
   const [page, setPage] = React.useState('feed');
   const [profileId, setProfileId] = React.useState(null);
   const [openPostId, setOpenPostId] = React.useState(null);
+  const [autoOpenVerify, setAutoOpenVerify] = React.useState(false);
   const [theme, setTheme] = React.useState(() => localStorage.getItem('theme')||'dark');
   const [connection, setConnection] = React.useState(null);
   const [, forceUpdate] = React.useReducer(x=>x+1, 0);
+  const [chatSubTab, setChatSubTab] = React.useState('groups');
+  const [dmFriend, setDmFriend] = React.useState(null);
+  const [currentDmFriendId, setCurrentDmFriendId] = React.useState(null);
+  const [notifications, setNotifications] = React.useState([]);
+  const [unreadDmSenders, setUnreadDmSenders] = React.useState(new Set());
+  const [showNotifPanel, setShowNotifPanel] = React.useState(false);
+  const [myAvatarUrl, setMyAvatarUrl] = React.useState(null);
+  const [showLanding, setShowLanding] = React.useState(() => !localStorage.getItem('user'));
+
+  const pageRef = React.useRef(page);
+  const chatSubTabRef = React.useRef(chatSubTab);
+  const currentDmFriendIdRef = React.useRef(currentDmFriendId);
+  React.useEffect(() => { pageRef.current = page; }, [page]);
+  React.useEffect(() => { chatSubTabRef.current = chatSubTab; }, [chatSubTab]);
+  React.useEffect(() => { currentDmFriendIdRef.current = currentDmFriendId; }, [currentDmFriendId]);
 
   React.useEffect(() => {
     const conn = new signalR.HubConnectionBuilder()
       .withUrl(BASE + '/hub')
       .withAutomaticReconnect()
       .build();
-    conn.start()
-      .then(() => { conn.invoke('JoinFeed'); setConnection(conn); })
-      .catch(() => {});
+    conn.start().then(() => {
+      conn.invoke('JoinFeed');
+      if (user) conn.invoke('JoinUser', user.id);
+      setConnection(conn);
+    }).catch(() => {});
     return () => conn.stop();
   }, []);
+
+  // Загружаем уведомления при старте и подписываемся на реал-тайм события
+  React.useEffect(() => {
+    if (!user) return;
+    api.getNotifications().then(setNotifications).catch(() => {});
+
+    // Загружаем аватар текущего пользователя
+    api.getUser(user.id).then(u => setMyAvatarUrl(u.avatarUrl)).catch(() => {});
+  }, [user?.id]);
+
+  React.useEffect(() => {
+    if (!connection) return;
+
+    const onNewNotif = notif => {
+      setNotifications(n => [notif, ...n]);
+    };
+
+    const onNewDM = msg => {
+      const senderId = msg.sender?.id;
+      if (!senderId) return;
+      if (pageRef.current === 'chats' && chatSubTabRef.current === 'friends' && currentDmFriendIdRef.current === senderId) return;
+      setUnreadDmSenders(s => new Set([...s, senderId]));
+    };
+
+    const onAvatarUpdated = ({ userId, avatarUrl }) => {
+      setAvatarCache(userId, avatarUrl);
+      if (userId === user?.id) setMyAvatarUrl(avatarUrl);
+    };
+
+    connection.on('NewNotification', onNewNotif);
+    connection.on('NewDM', onNewDM);
+    connection.on('AvatarUpdated', onAvatarUpdated);
+    return () => {
+      connection.off('NewNotification', onNewNotif);
+      connection.off('NewDM', onNewDM);
+      connection.off('AvatarUpdated', onAvatarUpdated);
+    };
+  }, [connection, user?.id]);
 
   const toggleTheme = () => {
     const next = theme==='dark'?'light':'dark';
@@ -1803,8 +3315,13 @@ function App() {
   const logout = () => {
     localStorage.removeItem('token');
     localStorage.removeItem('user');
+    setNotifications([]);
+    setUnreadDmSenders(new Set());
+    setMyAvatarUrl(null);
+    setShowNotifPanel(false);
+    setShowLanding(true);
     setUser(null);
-    toast('Вышел из аккаунта');
+    setTimeout(() => toast('Вышел из аккаунта'), 50);
   };
 
   const nav = (p, opts={}) => {
@@ -1812,23 +3329,72 @@ function App() {
     if (opts.profileId !== undefined) setProfileId(opts.profileId);
     else if (p === 'profile') setProfileId(user?.id ?? null);
     if (p !== 'feed') setOpenPostId(null);
+    if (p !== 'chats') { setChatSubTab('groups'); setDmFriend(null); setCurrentDmFriendId(null); }
   };
 
-  if (!user) return <>
-    <AuthPage onAuth={u => { setUser(u); setPage('feed'); toast(`Добро пожаловать, ${u.name}!`); }}/>
-    <ToastContainer/>
-  </>;
+  const openDM = (friend) => {
+    setDmFriend(friend);
+    setChatSubTab('friends');
+    setPage('chats');
+    setUnreadDmSenders(s => { const next = new Set(s); next.delete(friend.id); return next; });
+  };
+
+  const onFriendOpen = (friendId) => {
+    setCurrentDmFriendId(friendId);
+    setUnreadDmSenders(s => { const next = new Set(s); next.delete(friendId); return next; });
+  };
+
+  const markAllRead = async () => {
+    try {
+      await api.markAllRead();
+      setNotifications(n => n.map(x => ({ ...x, isRead: true })));
+    } catch {}
+  };
+
+  const unreadNotifCount = notifications.filter(n => !n.isRead).length;
+  const unreadDmCount = unreadDmSenders.size;
+
+  if (!user) {
+    if (showLanding) return <>
+      <LandingPage onGetStarted={() => setShowLanding(false)}/>
+      <ToastContainer/>
+    </>;
+    return <>
+      <AuthPage onAuth={u => {
+        setUser(u);
+        setPage('feed');
+        setProfileId(null);
+        setOpenPostId(null);
+        if (connection) connection.invoke('JoinUser', u.id).catch(()=>{});
+        setTimeout(() => toast(`Добро пожаловать, ${u.name}! 👋`), 50);
+      }}/>
+      <ToastContainer/>
+    </>;
+  }
 
   return (
     <div style={{ display:'flex', height:'100vh', overflow:'hidden', fontFamily:"'Plus Jakarta Sans',sans-serif", background:T.bg, color:T.text }}>
       <Sidebar
         page={page}
-        onNav={nav}
+        onNav={p => { nav(p); setShowNotifPanel(false); }}
         user={user}
         onLogout={logout}
         theme={theme}
         onToggleTheme={toggleTheme}
+        unreadDmCount={unreadDmCount}
+        unreadNotifCount={unreadNotifCount}
+        onOpenNotifications={()=>setShowNotifPanel(v=>!v)}
+        avatarUrl={myAvatarUrl}
       />
+
+      {showNotifPanel && (
+        <NotificationPanel
+          notifications={notifications}
+          currentUser={user}
+          onClose={()=>setShowNotifPanel(false)}
+          onMarkAllRead={markAllRead}
+        />
+      )}
 
       <div style={{ flex:1, display:'flex', minWidth:0, background:T.bg }}>
         {page==='feed' && (
@@ -1841,20 +3407,63 @@ function App() {
                 connection={connection}
                 onClose={()=>setOpenPostId(null)}
                 onNavigateProfile={id=>nav('profile',{profileId:id})}
+                onGoVerify={()=>{ setOpenPostId(null); setAutoOpenVerify(true); nav('profile',{profileId:user.id}); }}
               />
             )}
           </>
         )}
         {page==='create' && (
-          <CreatePage onDone={id=>{
-            toast('Событие опубликовано! 🎉');
-            setOpenPostId(id);
-            setPage('feed');
-          }}/>
+          <div className="page-anim" style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0 }}>
+            <CreatePage onDone={id=>{
+              toast('Событие опубликовано! 🎉');
+              setOpenPostId(id);
+              setPage('feed');
+            }}/>
+          </div>
         )}
-        {page==='recs' && <RecsPage currentUser={user}/>}
-        {page==='chats' && <ChatsPage currentUser={user} connection={connection}/>}
-        {page==='profile' && <ProfilePage userId={profileId||user.id} currentUser={user}/>}
+        {page==='recs' && <div className="page-anim" style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0 }}><RecsPage currentUser={user}/></div>}
+        {page==='chats' && (
+          <div className="page-anim" style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0 }}>
+            {/* Sub-tabs */}
+            <div style={{ display:'flex', gap:8, padding:'16px 20px 0', borderBottom:`1px solid ${T.border}`, flexShrink:0, background:T.bg }}>
+              {[['groups','👥 Группы'],['friends','💬 Личные']].map(([tab,label]) => (
+                <button key={tab} onClick={()=>{ setChatSubTab(tab); if(tab==='groups'){ setDmFriend(null); setCurrentDmFriendId(null); } }}
+                  style={{ padding:'8px 18px', borderRadius:'10px 10px 0 0', border:`1.5px solid ${chatSubTab===tab?T.accent:T.border}`, borderBottom:'none', background:chatSubTab===tab?T.accentBg:T.bg, color:chatSubTab===tab?T.accent:T.textSub, fontFamily:"'Plus Jakarta Sans',sans-serif", fontWeight:700, fontSize:14, cursor:'pointer', transition:'all 0.15s', display:'flex', alignItems:'center', gap:6 }}>
+                  {label}
+                  {tab==='friends' && unreadDmCount>0 && <Badge count={unreadDmCount}/>}
+                </button>
+              ))}
+            </div>
+            <div style={{ flex:1, display:'flex', minHeight:0 }}>
+              {chatSubTab==='groups'
+                ? <ChatsPage currentUser={user} connection={connection} onNavigateProfile={id=>nav('profile',{profileId:id})}/>
+                : <DMPage currentUser={user} connection={connection} initialFriend={dmFriend} onNavigateProfile={id=>nav('profile',{profileId:id})} onFriendOpen={onFriendOpen}/>
+              }
+            </div>
+          </div>
+        )}
+        {page==='profile' && (
+          <div className="page-anim" style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0 }}>
+            <ProfilePage
+              userId={profileId||user.id}
+              currentUser={user}
+              onOpenDM={openDM}
+              onNavigateProfile={id=>nav('profile',{profileId:id})}
+              autoOpenVerify={autoOpenVerify}
+              onVerifyOpened={()=>setAutoOpenVerify(false)}
+            />
+          </div>
+        )}
+        {page==='leaderboard' && (
+          <div className="page-anim" style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0 }}>
+            <LeaderboardPage onNavigateProfile={id=>nav('profile',{profileId:id})}/>
+          </div>
+        )}
+        {page==='moderation' && (
+          <div className="page-anim" style={{ flex:1, display:'flex', flexDirection:'column', minHeight:0 }}>
+            <ModerationPanel/>
+          </div>
+        )}
       </div>
 
       <ToastContainer/>

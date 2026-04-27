@@ -12,4 +12,21 @@ public class TogetherHub : Hub
 
     public async Task JoinFeed() =>
         await Groups.AddToGroupAsync(Context.ConnectionId, "feed");
+
+    // Личный чат — группа по отсортированной паре userId
+    public async Task JoinDM(int myId, int friendId)
+    {
+        var group = $"dm-{Math.Min(myId, friendId)}-{Math.Max(myId, friendId)}";
+        await Groups.AddToGroupAsync(Context.ConnectionId, group);
+    }
+
+    public async Task LeaveDM(int myId, int friendId)
+    {
+        var group = $"dm-{Math.Min(myId, friendId)}-{Math.Max(myId, friendId)}";
+        await Groups.RemoveFromGroupAsync(Context.ConnectionId, group);
+    }
+
+    // Личный канал для уведомлений
+    public async Task JoinUser(int userId) =>
+        await Groups.AddToGroupAsync(Context.ConnectionId, $"user-{userId}");
 }

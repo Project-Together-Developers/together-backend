@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using together_api.Data;
@@ -11,9 +12,11 @@ using together_api.Data;
 namespace together_api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260426150438_AddVerificationAndSafety")]
+    partial class AddVerificationAndSafety
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,41 +24,6 @@ namespace together_api.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("together_api.Models.AttendanceConfirmation", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("ConfirmerUserId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("PostId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TargetUserId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("WasPresent")
-                        .HasColumnType("boolean");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ConfirmerUserId");
-
-                    b.HasIndex("TargetUserId");
-
-                    b.HasIndex("PostId", "ConfirmerUserId", "TargetUserId")
-                        .IsUnique();
-
-                    b.ToTable("AttendanceConfirmations");
-                });
 
             modelBuilder.Entity("together_api.Models.ChatMessage", b =>
                 {
@@ -482,25 +450,6 @@ namespace together_api.Migrations
                     b.HasIndex("UserId");
 
                     b.ToTable("VerificationRequests");
-                });
-
-            modelBuilder.Entity("together_api.Models.AttendanceConfirmation", b =>
-                {
-                    b.HasOne("together_api.Models.User", "Confirmer")
-                        .WithMany()
-                        .HasForeignKey("ConfirmerUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("together_api.Models.User", "Target")
-                        .WithMany()
-                        .HasForeignKey("TargetUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Confirmer");
-
-                    b.Navigation("Target");
                 });
 
             modelBuilder.Entity("together_api.Models.ChatMessage", b =>

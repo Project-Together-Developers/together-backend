@@ -23,6 +23,7 @@ public class Post
 
     // Статус: active, full, past
     public string Status { get; set; } = "active";
+    public bool RequiresSafety { get; set; } = false;
 
     public int AuthorId { get; set; }
     public User? Author { get; set; }

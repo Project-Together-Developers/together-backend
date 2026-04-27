@@ -2,6 +2,7 @@
 using System;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Infrastructure;
+using Microsoft.EntityFrameworkCore.Migrations;
 using Microsoft.EntityFrameworkCore.Storage.ValueConversion;
 using Npgsql.EntityFrameworkCore.PostgreSQL.Metadata;
 using together_api.Data;
@@ -11,9 +12,11 @@ using together_api.Data;
 namespace together_api.Migrations
 {
     [DbContext(typeof(AppDbContext))]
-    partial class AppDbContextModelSnapshot : ModelSnapshot
+    [Migration("20260425214242_AddNotifications")]
+    partial class AddNotifications
     {
-        protected override void BuildModel(ModelBuilder modelBuilder)
+        /// <inheritdoc />
+        protected override void BuildTargetModel(ModelBuilder modelBuilder)
         {
 #pragma warning disable 612, 618
             modelBuilder
@@ -21,41 +24,6 @@ namespace together_api.Migrations
                 .HasAnnotation("Relational:MaxIdentifierLength", 63);
 
             NpgsqlModelBuilderExtensions.UseIdentityByDefaultColumns(modelBuilder);
-
-            modelBuilder.Entity("together_api.Models.AttendanceConfirmation", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<int>("ConfirmerUserId")
-                        .HasColumnType("integer");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int>("PostId")
-                        .HasColumnType("integer");
-
-                    b.Property<int>("TargetUserId")
-                        .HasColumnType("integer");
-
-                    b.Property<bool>("WasPresent")
-                        .HasColumnType("boolean");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ConfirmerUserId");
-
-                    b.HasIndex("TargetUserId");
-
-                    b.HasIndex("PostId", "ConfirmerUserId", "TargetUserId")
-                        .IsUnique();
-
-                    b.ToTable("AttendanceConfirmations");
-                });
 
             modelBuilder.Entity("together_api.Models.ChatMessage", b =>
                 {
@@ -265,9 +233,6 @@ namespace together_api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<bool>("RequiresSafety")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("Status")
                         .IsRequired()
                         .HasColumnType("text");
@@ -400,9 +365,6 @@ namespace together_api.Migrations
                         .IsRequired()
                         .HasColumnType("text");
 
-                    b.Property<bool>("IsVerified")
-                        .HasColumnType("boolean");
-
                     b.Property<string>("Location")
                         .IsRequired()
                         .HasColumnType("text");
@@ -426,81 +388,6 @@ namespace together_api.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Users");
-                });
-
-            modelBuilder.Entity("together_api.Models.VerificationRequest", b =>
-                {
-                    b.Property<int>("Id")
-                        .ValueGeneratedOnAdd()
-                        .HasColumnType("integer");
-
-                    NpgsqlPropertyBuilderExtensions.UseIdentityByDefaultColumn(b.Property<int>("Id"));
-
-                    b.Property<string>("BirthDate")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<DateTime>("CreatedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<string>("FullName")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("PassportNumber")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("PassportPhotoUrl")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("RejectionReason")
-                        .HasColumnType("text");
-
-                    b.Property<DateTime?>("ReviewedAt")
-                        .HasColumnType("timestamp with time zone");
-
-                    b.Property<int?>("ReviewedById")
-                        .HasColumnType("integer");
-
-                    b.Property<string>("SelfiePhotoUrl")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<string>("Status")
-                        .IsRequired()
-                        .HasColumnType("text");
-
-                    b.Property<int>("UserId")
-                        .HasColumnType("integer");
-
-                    b.HasKey("Id");
-
-                    b.HasIndex("ReviewedById");
-
-                    b.HasIndex("UserId");
-
-                    b.ToTable("VerificationRequests");
-                });
-
-            modelBuilder.Entity("together_api.Models.AttendanceConfirmation", b =>
-                {
-                    b.HasOne("together_api.Models.User", "Confirmer")
-                        .WithMany()
-                        .HasForeignKey("ConfirmerUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.HasOne("together_api.Models.User", "Target")
-                        .WithMany()
-                        .HasForeignKey("TargetUserId")
-                        .OnDelete(DeleteBehavior.Restrict)
-                        .IsRequired();
-
-                    b.Navigation("Confirmer");
-
-                    b.Navigation("Target");
                 });
 
             modelBuilder.Entity("together_api.Models.ChatMessage", b =>
@@ -635,24 +522,6 @@ namespace together_api.Migrations
                     b.Navigation("Post");
 
                     b.Navigation("ToUser");
-                });
-
-            modelBuilder.Entity("together_api.Models.VerificationRequest", b =>
-                {
-                    b.HasOne("together_api.Models.User", "ReviewedBy")
-                        .WithMany()
-                        .HasForeignKey("ReviewedById")
-                        .OnDelete(DeleteBehavior.SetNull);
-
-                    b.HasOne("together_api.Models.User", "User")
-                        .WithMany()
-                        .HasForeignKey("UserId")
-                        .OnDelete(DeleteBehavior.Cascade)
-                        .IsRequired();
-
-                    b.Navigation("ReviewedBy");
-
-                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("together_api.Models.Post", b =>

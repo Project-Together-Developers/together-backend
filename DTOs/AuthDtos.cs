@@ -18,3 +18,9 @@ public record UpdateProfileDto(
     string? Location,
     string? Bio
 );
+
+public record BroadcastDto(string Message);
+
+public record RejectVerificationDto(string Reason);
+
+public record AttendanceDto(List<int> PresentUserIds);
