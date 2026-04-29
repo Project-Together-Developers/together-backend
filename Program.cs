@@ -176,8 +176,12 @@ app.MapGet("/posts/{id:int}", async (AppDbContext db, int id) =>
 
 app.MapPost("/posts", async (AppDbContext db, ClaimsPrincipal user, PostCreateDto dto, IHubContext<TogetherHub> hub) =>
 {
+    if (dto.DateTo < dto.DateFrom)
+        return Results.BadRequest("Дата конца не может быть раньше даты начала");
+
     var userId = int.Parse(user.FindFirstValue(ClaimTypes.NameIdentifier)!);
     var author = await db.Users.FindAsync(userId);
+    if (author is null) return Results.BadRequest("Пользователь не найден");
 
     var post = new Post
     {
@@ -271,8 +275,10 @@ app.MapPost("/posts/{id:int}/join", async (AppDbContext db, ClaimsPrincipal user
     if (exists) return Results.Conflict("Already joined");
 
     var joiner = await db.Users.FindAsync(userId);
-    if (post.RequiresSafety && !(joiner?.IsVerified ?? false))
+    if (joiner is null) return Results.BadRequest("Пользователь не найден");
+    if (post.RequiresSafety && !joiner.IsVerified)
         return Results.Json(new { message = "Это событие только для верифицированных пользователей" }, statusCode: 403);
+
     db.Participants.Add(new Participant { PostId = id, UserId = userId });
     await db.SaveChangesAsync();
 
@@ -280,7 +286,7 @@ app.MapPost("/posts/{id:int}/join", async (AppDbContext db, ClaimsPrincipal user
     {
         UserId = userId,
         Status = "pending",
-        User = new { joiner!.Id, joiner.Name, joiner.Username, joiner.AvatarUrl }
+        User = new { joiner.Id, joiner.Name, joiner.Username, joiner.AvatarUrl, joiner.IsVerified }
     });
 
     return Results.Ok(new { status = "pending" });
@@ -394,6 +400,7 @@ app.MapPost("/posts/{id:int}/messages", async (AppDbContext db, ClaimsPrincipal 
     if (!isAuthor && !isApproved) return Results.Forbid();
 
     var author = await db.Users.FindAsync(userId);
+    if (author is null) return Results.BadRequest("Пользователь не найден");
     var message = new ChatMessage { PostId = id, AuthorId = userId, Text = dto.Text };
     db.ChatMessages.Add(message);
     await db.SaveChangesAsync();
@@ -1315,7 +1322,7 @@ app.MapGet("/users/{id:int}/ghost", async (AppDbContext db, int id) =>
     {
         var list = group.ToList();
         var absentVotes = list.Count(x => !x.WasPresent);
-        if (absentVotes > list.Count / 2.0) ghostEvents++;
+        if (absentVotes >= list.Count / 2.0 && absentVotes > 0) ghostEvents++;
     }
 
     var ghostPercent = (int)Math.Round((double)ghostEvents / confirmations.Count * 100);

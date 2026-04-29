@@ -419,7 +419,8 @@ function toast(msg, type='success') {
   if (!_toastSet) return;
   const id = Date.now();
   _toastSet(p=>[...p,{id,msg,type}]);
-  setTimeout(()=>_toastSet(p=>p.filter(t=>t.id!==id)), 3000);
+  const timeout = msg.length > 60 ? 5000 : type === 'error' ? 4000 : 3000;
+  setTimeout(()=>_toastSet(p=>p.filter(t=>t.id!==id)), timeout);
 }
 
 // ── SIDEBAR ───────────────────────────────────────────────────────────────────
@@ -767,9 +768,18 @@ function FeedPage({ currentUser, connection, onOpenPost }) {
 
   React.useEffect(() => { load(); }, [filters]);
 
+  const filtersRef = React.useRef(filters);
+  React.useEffect(() => { filtersRef.current = filters; }, [filters]);
+
   React.useEffect(() => {
     if (!connection) return;
-    const onNew = post => setPosts(p => [post, ...p]);
+    const onNew = post => {
+      const f = filtersRef.current;
+      if (f.activity && post.activity !== f.activity) return;
+      if (f.difficulty && post.difficulty !== f.difficulty) return;
+      if (f.status && post.status !== f.status) return;
+      setPosts(p => [post, ...p]);
+    };
     const onDel = id => setPosts(p => p.filter(x => x.id !== id));
     connection.on('NewPost', onNew);
     connection.on('PostDeleted', onDel);
@@ -979,7 +989,7 @@ function EventDetailPanel({ postId, currentUser, connection, onClose, onNavigate
   const sendMsg = async () => {
     const text = msgInput.trim(); if (!text) return;
     setMsgInput('');
-    try { await api.sendMessage(postId, text); } catch(e) { alert(e.message); }
+    try { await api.sendMessage(postId, text); } catch(e) { toast(e.message, 'error'); }
   };
 
   if (loading) return (
@@ -1196,7 +1206,7 @@ function CreatePage({ onDone }) {
     try {
       const res = await api.createPost({ ...form, totalSpots: form.spots, dateFrom: new Date(form.dateFrom).toISOString(), dateTo: new Date(form.dateTo).toISOString(), budget: form.budget||null, description: form.description||null, requiresSafety: form.requiresSafety });
       onDone(res.id);
-    } catch(e) { alert(e.message); }
+    } catch(e) { toast(e.message, 'error'); }
     setLoading(false);
   };
 
@@ -1704,7 +1714,7 @@ function RatingBar({ star, count, max }) {
   );
 }
 
-function ProfilePage({ userId, currentUser, onOpenDM, onNavigateProfile, autoOpenVerify, onVerifyOpened }) {
+function ProfilePage({ userId, currentUser, onOpenDM, onNavigateProfile, autoOpenVerify, onVerifyOpened, onUserUpdate }) {
   const [user, setUser] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [showReviewForm, setShowReviewForm] = React.useState(false);
@@ -1786,7 +1796,7 @@ function ProfilePage({ userId, currentUser, onOpenDM, onNavigateProfile, autoOpe
   };
 
   const submitVerification = async () => {
-    if (!verifForm.fullName || !verifForm.passportNumber || !verifForm.birthDate)
+    if (!verifForm.fullName.trim() || !verifForm.passportNumber.trim() || !verifForm.birthDate)
       return toast('Заполните все поля', 'error');
     if (!verifFiles.passportPhoto || !verifFiles.selfiePhoto)
       return toast('Загрузите оба фото', 'error');
@@ -1801,6 +1811,15 @@ function ProfilePage({ userId, currentUser, onOpenDM, onNavigateProfile, autoOpe
     finally { setVerifLoading(false); }
   };
 
+  // Обновляем isVerified в localStorage когда верификация одобрена
+  React.useEffect(() => {
+    if (verifStatus?.status === 'approved' && isMe && !currentUser.isVerified) {
+      const fresh = { ...currentUser, isVerified: true };
+      localStorage.setItem('user', JSON.stringify(fresh));
+      onUserUpdate && onUserUpdate(fresh);
+    }
+  }, [verifStatus?.status]);
+
   const saveProfile = async () => {
     setSaving(true);
     try {
@@ -1808,7 +1827,7 @@ function ProfilePage({ userId, currentUser, onOpenDM, onNavigateProfile, autoOpe
       const u = await api.getUser(userId);
       setUser(u);
       setEditing(false);
-    } catch(e) { alert(e.message); }
+    } catch(e) { toast(e.message, 'error'); }
     finally { setSaving(false); }
   };
 
@@ -1818,7 +1837,7 @@ function ProfilePage({ userId, currentUser, onOpenDM, onNavigateProfile, autoOpe
       setShowReviewForm(false);
       const u = await api.getUser(userId);
       setUser(u);
-    } catch(e) { alert(e.message); }
+    } catch(e) { toast(e.message, 'error'); }
   };
 
   if (loading) return <div style={{ flex:1, display:'flex', alignItems:'center', justifyContent:'center' }}><Spinner/></div>;
@@ -3264,8 +3283,16 @@ function App() {
     if (!user) return;
     api.getNotifications().then(setNotifications).catch(() => {});
 
-    // Загружаем аватар текущего пользователя
-    api.getUser(user.id).then(u => setMyAvatarUrl(u.avatarUrl)).catch(() => {});
+    // Загружаем профиль: синхронизируем role/isVerified/avatarUrl из БД в localStorage
+    api.getUser(user.id).then(u => {
+      setMyAvatarUrl(u.avatarUrl);
+      const fresh = { ...user, role: u.role, isVerified: u.isVerified, avatarUrl: u.avatarUrl };
+      localStorage.setItem('user', JSON.stringify(fresh));
+      // Если role или isVerified изменились — обновляем состояние
+      if (u.role !== user.role || u.isVerified !== user.isVerified) {
+        setUser(fresh);
+      }
+    }).catch(() => {});
   }, [user?.id]);
 
   React.useEffect(() => {
@@ -3451,6 +3478,7 @@ function App() {
               onNavigateProfile={id=>nav('profile',{profileId:id})}
               autoOpenVerify={autoOpenVerify}
               onVerifyOpened={()=>setAutoOpenVerify(false)}
+              onUserUpdate={u=>setUser(u)}
             />
           </div>
         )}
